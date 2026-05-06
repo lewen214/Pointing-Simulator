@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>POINTING SIMULATOR — MISSION CONTROL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<style>
+/* ─── TOKENS ──────────────────────────────────────────────────────────── */
+:root {
+  --bg:       #03040a;
+  --bg1:      #070a12;
+  --bg2:      #0b0f1c;
+  --border:   #1b2235;
+  --amber:    #f0a030;
+  --amber2:   #ffd080;
+  --cyan:     #00d4e8;
+  --green:    #39ff88;
+  --red:      #ff4444;
+  --dim:      #4a5572;
+  --text:     #c4cfdf;
+  --muted:    #5a6480;
+  --glow-a:   rgba(240,160,48,0.18);
+  --glow-c:   rgba(0,212,232,0.18);
+  --scan-h:   2px;
+}
+
+/* ─── RESET & BASE ────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  width: 100%; height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Share Tech Mono', monospace;
+  overflow-x: hidden;
+}
+
+/* Scanline overlay across whole page */
+body::after {
+  content: '';
+  position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0, transparent calc(var(--scan-h) * 2),
+    rgba(0,0,0,0.08) calc(var(--scan-h) * 2), rgba(0,0,0,0.08) calc(var(--scan-h) * 3)
+  );
+}
+
+/* ─── HEADER ──────────────────────────────────────────────────────────── */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px;
+  height: 56px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg1);
+  position: relative;
+}
+header::after {
+  content: '';
+  position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--amber), transparent);
+}
+.header-logo {
+  font-family: 'Orbitron', monospace;
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 4px;
+  color: var(--amber);
+  text-shadow: 0 0 20px var(--amber);
+}
+.header-logo span { color: var(--cyan); }
+.header-center {
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.header-right { display: flex; align-items: center; gap: 20px; }
+#clock {
+  font-size: 20px;
+  color: var(--amber2);
+  text-shadow: 0 0 12px var(--amber);
+  letter-spacing: 2px;
+}
+.live-badge {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; letter-spacing: 2px;
+  color: var(--green);
+  border: 1px solid var(--green);
+  padding: 3px 8px;
+  text-shadow: 0 0 8px var(--green);
+  box-shadow: 0 0 8px rgba(57,255,136,0.2);
+}
+.live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: pulse-green 1.2s ease-in-out infinite;
+}
+@keyframes pulse-green {
+  0%,100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* ─── MAIN LAYOUT ─────────────────────────────────────────────────────── */
+.main {
+  display: grid;
+  grid-template-columns: 460px 260px 1fr;
+  grid-template-rows: 1fr;
+  height: calc(100vh - 56px - 230px);
+  min-height: 420px;
+  border-bottom: 1px solid var(--border);
+}
+.bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  height: 230px;
+}
+
+/* ─── PANELS ──────────────────────────────────────────────────────────── */
+.panel {
+  border-right: 1px solid var(--border);
+  background: var(--bg1);
+  position: relative;
+  overflow: hidden;
+}
+.panel:last-child { border-right: none; }
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  font-family: 'Orbitron', monospace;
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: var(--dim);
+  background: var(--bg2);
+}
+.panel-header span { color: var(--amber); }
+.panel-body { padding: 12px 16px; height: calc(100% - 32px); }
+
+/* ─── ORBIT CANVAS ────────────────────────────────────────────────────── */
+#orbit-panel { padding: 0; }
+#orbit-canvas {
+  display: block;
+  width: 100%; height: 100%;
+  cursor: crosshair;
+}
+
+/* ─── METRICS ─────────────────────────────────────────────────────────── */
+.metric-row {
+  display: flex; flex-direction: column;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.metric-row:last-child { border-bottom: none; }
+.metric-label {
+  font-size: 9px; letter-spacing: 2px;
+  color: var(--muted); text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.metric-value {
+  font-family: 'Orbitron', monospace;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--amber2);
+  text-shadow: 0 0 16px var(--amber);
+  line-height: 1;
+}
+.metric-value.cyan  { color: var(--cyan);  text-shadow: 0 0 16px var(--cyan); }
+.metric-value.green { color: var(--green); text-shadow: 0 0 16px var(--green); }
+.metric-unit { font-size: 11px; color: var(--dim); margin-left: 4px; }
+
+/* PAT state indicator */
+.pat-states {
+  display: flex; flex-direction: column; gap: 6px;
+  margin-top: 12px;
+}
+.pat-state-item {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 10px; letter-spacing: 1px;
+  color: var(--muted);
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  transition: all 0.3s;
+}
+.pat-state-item.active {
+  color: var(--amber2);
+  border-color: var(--amber);
+  background: rgba(240,160,48,0.07);
+  box-shadow: 0 0 12px rgba(240,160,48,0.15);
+}
+.pat-state-item.active .state-dot {
+  background: var(--amber);
+  box-shadow: 0 0 8px var(--amber);
+  animation: pulse-green 0.8s ease-in-out infinite;
+}
+.state-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--dim); flex-shrink: 0;
+}
+
+/* ─── CHARTS ──────────────────────────────────────────────────────────── */
+.chart-container { width: 100%; height: 100%; }
+.plotly-chart { width: 100%; height: 100%; }
+
+/* ─── BOTTOM ROW ──────────────────────────────────────────────────────── */
+.bottom .panel-body { padding: 0; }
+
+/* ─── RUN CONTROL ─────────────────────────────────────────────────────── */
+.run-controls {
+  display: flex; align-items: center; gap: 10px;
+  flex-wrap: wrap;
+}
+.algo-select {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  padding: 5px 8px;
+  cursor: pointer;
+  outline: none;
+}
+.algo-select:focus { border-color: var(--amber); }
+
+.run-btn {
+  background: transparent;
+  border: 1px solid var(--amber);
+  color: var(--amber);
+  font-family: 'Orbitron', monospace;
+  font-size: 9px;
+  letter-spacing: 2px;
+  padding: 6px 14px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+.run-btn:hover {
+  background: rgba(240,160,48,0.1);
+  box-shadow: 0 0 16px rgba(240,160,48,0.3);
+}
+.run-btn:active { transform: scale(0.97); }
+.run-btn.running {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  box-shadow: 0 0 16px rgba(0,212,232,0.3);
+}
+
+/* loading indicator */
+.running-indicator {
+  display: none;
+  font-size: 10px; color: var(--cyan);
+  letter-spacing: 2px;
+  animation: blink 0.5s step-end infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ─── PROGRESS BAR ────────────────────────────────────────────────────── */
+.sim-progress {
+  height: 2px;
+  background: var(--border);
+  margin-top: 8px;
+  position: relative;
+  overflow: hidden;
+}
+.sim-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--amber), var(--cyan));
+  transition: width 0.3s;
+  box-shadow: 0 0 8px var(--amber);
+}
+.sim-progress-bar.indeterminate {
+  width: 40%;
+  animation: slide 1s linear infinite;
+}
+@keyframes slide {
+  from { transform: translateX(-150%); }
+  to   { transform: translateX(350%); }
+}
+
+/* ─── NOISE TEXTURE ───────────────────────────────────────────────────── */
+.panel::before {
+  content: '';
+  position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 150px;
+}
+.panel > * { position: relative; z-index: 1; }
+
+/* ─── TOOLTIP / STATUS ────────────────────────────────────────────────── */
+#status-bar {
+  display: flex; align-items: center; gap: 16px;
+  padding: 4px 24px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  font-size: 10px; letter-spacing: 1px; color: var(--muted);
+  height: 24px;
+}
+#status-bar .sep { color: var(--border); }
+#status-msg { color: var(--cyan); }
+
+/* ─── SCROLLBAR ───────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ─── RESPONSIVE hints ────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .main { grid-template-columns: 360px 220px 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ HEADER ═══════════════════════════════════════════════════════════ -->
+<header>
+  <div class="header-logo">◈ POINTING<span>SIM</span></div>
+  <div class="header-center">低轨卫星激光通信位置指向算法仿真平台</div>
+  <div class="header-right">
+    <div id="clock">--:--:--</div>
+    <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+  </div>
+</header>
+
+<!-- ═══ STATUS BAR ════════════════════════════════════════════════════════ -->
+<div id="status-bar">
+  <span>SAT-A ◎ 600km LEO inc=53.0°</span>
+  <span class="sep">|</span>
+  <span>SAT-B ◎ 600km LEO inc=53.1° RAAN+0.5°</span>
+  <span class="sep">|</span>
+  <span id="status-msg">LOADING TELEMETRY DATA...</span>
+</div>
+
+<!-- ═══ MAIN GRID ═════════════════════════════════════════════════════════ -->
+<div class="main">
+
+  <!-- LEFT: Orbit Canvas -->
+  <div class="panel" id="orbit-panel">
+    <div class="panel-header">
+      <span>ORBITAL TRACKING DISPLAY</span>
+      <span id="orbit-time">T+0.0s</span>
+    </div>
+    <canvas id="orbit-canvas"></canvas>
+  </div>
+
+  <!-- CENTER: Metrics -->
+  <div class="panel">
+    <div class="panel-header">
+      <span>TELEMETRY</span>
+      <div class="run-controls">
+        <select class="algo-select" id="algo-select">
+          <option value="lead_ahead">LEAD AHEAD ★</option>
+          <option value="naive">NAIVE</option>
+          <option value="light_time">LIGHT TIME</option>
+          <option value="predictive">PREDICTIVE</option>
+        </select>
+        <button class="run-btn" id="run-btn" onclick="runSim()">▶ RUN</button>
+      </div>
+    </div>
+    <div class="panel-body" style="overflow-y:auto; height:calc(100% - 32px);">
+      <div class="sim-progress"><div class="sim-progress-bar" id="progress-bar"></div></div>
+      <div style="margin-top:8px;">
+        <div class="metric-row">
+          <div class="metric-label">Tracking RMS Error</div>
+          <div class="metric-value" id="m-rms">—<span class="metric-unit">μrad</span></div>
+        </div>
+        <div class="metric-row">
+          <div class="metric-label">Link Availability</div>
+          <div class="metric-value green" id="m-avail">—<span class="metric-unit">%</span></div>
+        </div>
+        <div class="metric-row">
+          <div class="metric-label">Point-Ahead Angle</div>
+          <div class="metric-value cyan" id="m-lead">—<span class="metric-unit">μrad</span></div>
+        </div>
+        <div class="metric-row">
+          <div class="metric-label">Light Travel Time</div>
+          <div class="metric-value" id="m-light">—<span class="metric-unit">ms</span></div>
+        </div>
+        <div class="metric-row">
+          <div class="metric-label">Inter-satellite Distance</div>
+          <div class="metric-value cyan" id="m-dist">—<span class="metric-unit">km</span></div>
+        </div>
+        <div class="metric-row" style="border:none;">
+          <div class="metric-label">PAT State Machine</div>
+          <div class="pat-states" id="pat-states">
+            <div class="pat-state-item" data-state="1"><div class="state-dot"></div>SCANNING</div>
+            <div class="pat-state-item" data-state="2"><div class="state-dot"></div>ACQUISITION</div>
+            <div class="pat-state-item active" data-state="3"><div class="state-dot"></div>TRACKING</div>
+            <div class="pat-state-item" data-state="4"><div class="state-dot"></div>LOST</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Error Chart -->
+  <div class="panel">
+    <div class="panel-header">
+      <span>POINTING ERROR TIMESERIES</span>
+      <span id="chart-algo-label" style="color:var(--amber)">LEAD AHEAD</span>
+    </div>
+    <div class="panel-body" style="padding:4px;">
+      <div id="chart-error" style="width:100%;height:100%;"></div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- ═══ BOTTOM GRID ═══════════════════════════════════════════════════════ -->
+<div class="bottom">
+
+  <!-- Algorithm Comparison -->
+  <div class="panel">
+    <div class="panel-header"><span>ALGORITHM COMPARISON</span><span>RMS ERROR (μrad)</span></div>
+    <div class="panel-body"><div id="chart-compare" style="width:100%;height:100%;"></div></div>
+  </div>
+
+  <!-- PAT State Timeline -->
+  <div class="panel">
+    <div class="panel-header"><span>PAT STATE TIMELINE</span><span>CURRENT RUN</span></div>
+    <div class="panel-body"><div id="chart-state" style="width:100%;height:100%;"></div></div>
+  </div>
+
+  <!-- Monte Carlo -->
+  <div class="panel">
+    <div class="panel-header"><span>MONTE CARLO  N=50</span><span id="mc-summary">—</span></div>
+    <div class="panel-body"><div id="chart-mc" style="width:100%;height:100%;"></div></div>
+  </div>
+
+</div><!-- /bottom -->
+
+<!-- ═══ SCRIPTS ═══════════════════════════════════════════════════════════ -->
+<script>
+// ── Plotly base layout ───────────────────────────────────────────────────
+const PLOTLY_BASE = {
+  paper_bgcolor: 'transparent',
+  plot_bgcolor:  'rgba(3,4,10,0.6)',
+  font: { family: "'Share Tech Mono', monospace", color: '#5a6480', size: 10 },
+  margin: { l:40, r:10, t:8, b:36 },
+  xaxis: { gridcolor:'#111827', zerolinecolor:'#1b2235', tickfont:{size:9}, linecolor:'#1b2235' },
+  yaxis: { gridcolor:'#111827', zerolinecolor:'#1b2235', tickfont:{size:9}, linecolor:'#1b2235' },
+  showlegend: false,
+};
+const AMB = '#f0a030', CYA = '#00d4e8', GRN = '#39ff88', RED = '#ff4444', DIM = '#2a3045';
+
+// ── Clock ────────────────────────────────────────────────────────────────
+function updateClock() {
+  const n = new Date();
+  document.getElementById('clock').textContent =
+    String(n.getHours()).padStart(2,'0') + ':' +
+    String(n.getMinutes()).padStart(2,'0') + ':' +
+    String(n.getSeconds()).padStart(2,'0');
+}
+setInterval(updateClock, 1000); updateClock();
+
+// ── Status helper ────────────────────────────────────────────────────────
+function setStatus(msg) { document.getElementById('status-msg').textContent = msg; }
+
+// ── Metrics updater ──────────────────────────────────────────────────────
+function animateNumber(id, to, decimals=1) {
+  const el = document.getElementById(id);
+  const unit = el.querySelector('.metric-unit')?.outerHTML || '';
+  // Strip unit for numeric content
+  const from = parseFloat(el.textContent) || 0;
+  const start = performance.now();
+  const dur = 600;
+  function step(now) {
+    const p = Math.min((now - start) / dur, 1);
+    const val = from + (to - from) * (1 - Math.pow(1 - p, 3));
+    el.innerHTML = val.toFixed(decimals) + unit;
+    if (p < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+function updateMetrics(metrics) {
+  if (!metrics) return;
+  if (metrics.tracking_rms_urad != null)
+    animateNumber('m-rms', metrics.tracking_rms_urad, 1);
+  if (metrics.availability_pct != null)
+    animateNumber('m-avail', metrics.availability_pct, 2);
+  if (metrics.mean_lead_angle_urad != null)
+    animateNumber('m-lead', metrics.mean_lead_angle_urad, 2);
+  if (metrics.mean_light_time_ms != null)
+    animateNumber('m-light', metrics.mean_light_time_ms, 3);
+  if (metrics.mean_distance_km != null)
+    animateNumber('m-dist', metrics.mean_distance_km, 1);
+}
+
+// ── PAT state indicator ──────────────────────────────────────────────────
+let lastPatState = -1;
+function setPATState(stateVal) {
+  if (stateVal === lastPatState) return;
+  lastPatState = stateVal;
+  document.querySelectorAll('.pat-state-item').forEach(el => {
+    el.classList.toggle('active', parseInt(el.dataset.state) === stateVal);
+  });
+}
+
+// ── Error chart ──────────────────────────────────────────────────────────
+function renderErrorChart(data) {
+  const traces = [
+    { x: data.t, y: data.total_error, mode:'lines', name:'Total',
+      line: { color: AMB, width: 1.2 } },
+    { x: data.t, y: data.az_error, mode:'lines', name:'Az',
+      line: { color: CYA, width: 0.8, dash:'dot' }, opacity:0.6 },
+    { x: data.t, y: data.el_error, mode:'lines', name:'El',
+      line: { color: GRN, width: 0.8, dash:'dot' }, opacity:0.6 },
+  ];
+  const layout = {
+    ...PLOTLY_BASE,
+    xaxis: { ...PLOTLY_BASE.xaxis, title:{text:'Time (s)', font:{size:9}} },
+    yaxis: { ...PLOTLY_BASE.yaxis, title:{text:'Error (μrad)', font:{size:9}} },
+    legend: { font:{size:9,color:'#5a6480'}, bgcolor:'transparent',
+              x:0.02, y:0.98, orientation:'h' },
+    showlegend: true,
+    shapes: [
+      { type:'line', x0:0,x1:1, xref:'paper', y0:60, y1:60,
+        line:{color:'rgba(240,160,48,0.3)',width:1,dash:'dash'} },
+      { type:'line', x0:0,x1:1, xref:'paper', y0:0, y1:0,
+        line:{color:'rgba(0,212,232,0.15)',width:1} },
+    ]
+  };
+  Plotly.newPlot('chart-error', traces, layout, {responsive:true, displayModeBar:false});
+
+  // Also render PAT state timeline
+  const stateNames = {1:'SCAN',2:'ACQ',3:'TRACK',4:'LOST'};
+  const stateColors = {1:DIM, 2:AMB, 3:GRN, 4:RED};
+  const stateTrace = {
+    x: data.t, y: data.pat_state,
+    mode: 'lines', type: 'scatter', fill:'tozeroy',
+    fillcolor: 'rgba(57,255,136,0.06)',
+    line: { color: GRN, width: 1.5, shape:'hv' },
+    name: 'PAT State',
+  };
+  const stateLayout = {
+    ...PLOTLY_BASE,
+    xaxis: { ...PLOTLY_BASE.xaxis, title:{text:'Time (s)', font:{size:9}} },
+    yaxis: {
+      ...PLOTLY_BASE.yaxis, title:{text:'State', font:{size:9}},
+      tickmode:'array', tickvals:[1,2,3,4],
+      ticktext:['SCAN','ACQ','TRACK','LOST']
+    },
+  };
+  Plotly.newPlot('chart-state', [stateTrace], stateLayout,
+                 {responsive:true, displayModeBar:false});
+
+  // Animate the current PAT state from last data point
+  const lastState = data.pat_state[data.pat_state.length - 1];
+  setPATState(lastState);
+}
+
+// ── Compare chart ─────────────────────────────────────────────────────────
+function renderCompareChart(d) {
+  if (!d || d.error) { setStatus('No comparison data — run --compare'); return; }
+  const colors = d.algorithms.map(a =>
+    a==='lead_ahead' ? AMB : a==='naive' ? DIM : a==='light_time' ? CYA : GRN);
+  const trace = {
+    type: 'bar', x: d.algorithms, y: d.rms,
+    marker: { color: colors, opacity: 0.85,
+              line: { color: colors, width: 1 } },
+    text: d.rms.map(v => v.toFixed(1)),
+    textposition: 'outside',
+    textfont: { color: '#8a95a8', size: 9 },
+  };
+  const layout = {
+    ...PLOTLY_BASE,
+    margin: {...PLOTLY_BASE.margin, t:12, b:50},
+    yaxis: { ...PLOTLY_BASE.yaxis,
+      title:{text:'RMS (μrad)', font:{size:9}},
+      range:[0, Math.max(...d.rms)*1.25] },
+    xaxis: { ...PLOTLY_BASE.xaxis, tickfont:{size:9,color:'#8a95a8'} },
+    annotations: [{ x: 'lead_ahead', y: Math.max(...d.rms)*1.15,
+      text:'★ BEST', showarrow:false,
+      font:{color:AMB, size:9, family:"'Orbitron',monospace"} }]
+  };
+  Plotly.newPlot('chart-compare', [trace], layout, {responsive:true, displayModeBar:false});
+}
+
+// ── Monte Carlo chart ─────────────────────────────────────────────────────
+function renderMCChart(d) {
+  if (!d || d.error) { setStatus('No MC data — run --monte-carlo'); return; }
+  document.getElementById('mc-summary').textContent =
+    `SUCCESS ${d.success_pct.toFixed(0)}%  RMS̄=${d.rms_mean.toFixed(1)}±${d.rms_std.toFixed(1)} μrad`;
+  const trace = {
+    type: 'histogram', x: d.rms, nbinsx: 20,
+    marker: { color: CYA, opacity: 0.75,
+              line: { color: 'rgba(0,212,232,0.4)', width: 1 } },
+    name: 'RMS Distribution',
+  };
+  const layout = {
+    ...PLOTLY_BASE,
+    margin: {...PLOTLY_BASE.margin, t:12, b:50},
+    xaxis: { ...PLOTLY_BASE.xaxis, title:{text:'Tracking RMS (μrad)', font:{size:9}} },
+    yaxis: { ...PLOTLY_BASE.yaxis, title:{text:'Count', font:{size:9}} },
+    shapes: [{
+      type:'line', x0:d.rms_mean, x1:d.rms_mean, y0:0, y1:1, yref:'paper',
+      line:{color:AMB, width:1.5, dash:'dash'}
+    }],
+    annotations: [{
+      x: d.rms_mean, y:0.92, yref:'paper',
+      text:`mean<br>${d.rms_mean.toFixed(1)}`, showarrow:false,
+      font:{color:AMB, size:9}, xanchor:'left', xshift:4
+    }]
+  };
+  Plotly.newPlot('chart-mc', [trace], layout, {responsive:true, displayModeBar:false});
+}
+
+// ── Load initial data ─────────────────────────────────────────────────────
+async function loadInitialData() {
+  setStatus('LOADING SIM DATA...');
+  try {
+    const [simRes, cmpRes, mcRes] = await Promise.all([
+      fetch('/api/sim_data?algo=lead_ahead'),
+      fetch('/api/compare'),
+      fetch('/api/monte_carlo'),
+    ]);
+    const simData = await simRes.json();
+    const cmpData = await cmpRes.json();
+    const mcData  = await mcRes.json();
+
+    if (!simData.error) {
+      renderErrorChart(simData);
+      // Derive rough metrics from CSV
+      const tr = simData.pat_state.map((s,i)=>i).filter(i=>simData.pat_state[i]===3);
+      if (tr.length > 0) {
+        const rmsArr = tr.map(i=>simData.total_error[i]);
+        const rms = Math.sqrt(rmsArr.reduce((a,v)=>a+v*v,0)/rmsArr.length);
+        const avail = tr.length/simData.t.length*100;
+        const lead = simData.lead_angle ? simData.lead_angle.slice(-100)
+                                               .reduce((a,v)=>a+v,0)/100 : 0;
+        const lt   = simData.light_time ? simData.light_time.slice(-100)
+                                               .reduce((a,v)=>a+v,0)/100 : 0;
+        const dist = simData.distance ? simData.distance.slice(-100)
+                                             .reduce((a,v)=>a+v,0)/100 : 0;
+        updateMetrics({
+          tracking_rms_urad: rms,
+          availability_pct: avail,
+          mean_lead_angle_urad: lead,
+          mean_light_time_ms: lt,
+          mean_distance_km: dist,
+        });
+      }
+      setStatus('DATA LOADED — TELEMETRY NOMINAL');
+    }
+    renderCompareChart(cmpData);
+    renderMCChart(mcData);
+
+    // Kick off orbit animation after data load
+    startOrbitAnimation();
+  } catch (e) {
+    setStatus('ERROR LOADING DATA: ' + e.message);
+  }
+}
+
+// ── Run simulation ────────────────────────────────────────────────────────
+async function runSim() {
+  const algo = document.getElementById('algo-select').value;
+  const btn  = document.getElementById('run-btn');
+  const bar  = document.getElementById('progress-bar');
+
+  btn.classList.add('running');
+  btn.textContent = '◎ RUNNING';
+  bar.classList.add('indeterminate');
+  setStatus(`RUNNING ${algo.toUpperCase()} SIMULATION...`);
+  document.getElementById('chart-algo-label').textContent = algo.toUpperCase().replace('_',' ');
+
+  try {
+    const res = await fetch('/api/run', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({algorithm: algo, duration: 120})
+    });
+    const data = await res.json();
+
+    bar.classList.remove('indeterminate');
+    bar.style.width = '100%';
+    setTimeout(() => { bar.style.width = '0%'; }, 1200);
+
+    if (data.error) { setStatus('SIM ERROR: ' + data.error); return; }
+
+    renderErrorChart(data);
+    updateMetrics(data.metrics);
+    setStatus(`${algo.toUpperCase()} COMPLETE — RMS ${data.metrics.tracking_rms_urad?.toFixed(1)} μrad  AVAIL ${data.metrics.availability_pct?.toFixed(2)}%`);
+  } catch(e) {
+    setStatus('RUN FAILED: ' + e.message);
+    bar.classList.remove('indeterminate');
+  } finally {
+    btn.classList.remove('running');
+    btn.textContent = '▶ RUN';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ORBIT CANVAS ANIMATION
+// ══════════════════════════════════════════════════════════════════════════
+const MU = 3.986004418e14;
+const RE = 6378137;
+const ALT = 600e3;
+const r_orbit = RE + ALT;
+const omega_orbit = Math.sqrt(MU / (r_orbit ** 3));
+
+const SATS = [
+  { inc: 53.0,  raan: 0.0,  phase0: 0.0,   color: '#f0a030', glow: 'rgba(240,160,48,', label:'A' },
+  { inc: 53.1,  raan: 0.5,  phase0: 0.1,   color: '#00d4e8', glow: 'rgba(0,212,232,',  label:'B' },
+];
+
+const TRAIL_LEN = 120;
+const trails = SATS.map(() => []);
+let animTime = 0;
+let animRAF = null;
+let orbitPositions = null; // full orbit trace points
+
+// Convert 3D ECI to 2D canvas (top-down + mild tilt for perspective)
+function eciToCanvas(pos, cx, cy, scale) {
+  // Mild isometric-style projection: mostly XY, slight Z tilt
+  const tilt = 0.18;
+  const sx = cx + (pos[0] + pos[2]*tilt) * scale;
+  const sy = cy - (pos[1] + pos[2]*tilt*0.5) * scale;
+  return { x:sx, y:sy };
+}
+
+function getSatPos(t, sat) {
+  const inc  = sat.inc  * Math.PI / 180;
+  const raan = sat.raan * Math.PI / 180;
+  const ph   = sat.phase0 * Math.PI / 180;
+  const theta = omega_orbit * t + ph;
+
+  const xo = r_orbit * Math.cos(theta);
+  const yo = r_orbit * Math.sin(theta);
+
+  const ci = Math.cos(inc), si = Math.sin(inc);
+  const co = Math.cos(raan), so = Math.sin(raan);
+
+  return [
+    co*xo - so*ci*yo,
+    so*xo + co*ci*yo,
+    si*yo,
+  ];
+}
+
+function startOrbitAnimation() {
+  const canvas = document.getElementById('orbit-canvas');
+  const panel  = document.getElementById('orbit-panel');
+  const ctx    = canvas.getContext('2d');
+
+  // Compute full orbit traces (once)
+  const N = 360;
+  orbitPositions = SATS.map(sat => {
+    const pts = [];
+    for (let i = 0; i < N; i++) {
+      const t = (i / N) * (2 * Math.PI / omega_orbit);
+      pts.push(getSatPos(t, sat));
+    }
+    return pts;
+  });
+
+  let lastTs = null;
+  let scanAngle = 0;
+
+  function resize() {
+    const rect = panel.getBoundingClientRect();
+    canvas.width  = rect.width;
+    canvas.height = rect.height - 33; // subtract header
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  function draw(ts) {
+    animRAF = requestAnimationFrame(draw);
+    if (!lastTs) lastTs = ts;
+    const dt = (ts - lastTs) / 1000;
+    lastTs = ts;
+
+    // Speed: 200× real time for visual
+    animTime += dt * 200;
+    scanAngle = (scanAngle + dt * 0.4) % (Math.PI * 2);
+
+    document.getElementById('orbit-time').textContent = `T+${animTime.toFixed(0)}s`;
+
+    const W = canvas.width, H = canvas.height;
+    const cx = W * 0.5, cy = H * 0.5;
+    const SCALE = Math.min(W, H) * 0.42 / r_orbit;
+
+    ctx.clearRect(0, 0, W, H);
+
+    // Background gradient
+    const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W,H)*0.7);
+    bg.addColorStop(0,   '#08090f');
+    bg.addColorStop(1,   '#03040a');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // Radar range rings
+    for (let i = 1; i <= 5; i++) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, (Math.min(W,H)*0.45) * (i/5), 0, Math.PI*2);
+      ctx.strokeStyle = `rgba(27,34,53,${0.4 + i*0.04})`;
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+
+    // Crosshairs
+    ctx.strokeStyle = 'rgba(27,34,53,0.5)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(cx,0); ctx.lineTo(cx,H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,cy); ctx.lineTo(W,cy); ctx.stroke();
+
+    // Diagonal grid lines (30deg increments)
+    for (let a = 0; a < Math.PI*2; a += Math.PI/6) {
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(a)*W, cy + Math.sin(a)*W);
+      ctx.strokeStyle = 'rgba(27,34,53,0.25)';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+
+    // Radar sweep
+    const swpGrad = ctx.createConicalGradient
+      ? null // not in all browsers
+      : null;
+    // Fallback: draw sweep arc
+    const sweepR = Math.min(W,H)*0.45;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(scanAngle);
+    const sweepG = ctx.createLinearGradient(0, 0, sweepR, 0);
+    sweepG.addColorStop(0,   'rgba(57,255,136,0.0)');
+    sweepG.addColorStop(0.7, 'rgba(57,255,136,0.03)');
+    sweepG.addColorStop(1,   'rgba(57,255,136,0.12)');
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, sweepR, -0.3, 0.0);
+    ctx.closePath();
+    ctx.fillStyle = sweepG;
+    ctx.fill();
+    // Sweep line
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(sweepR, 0);
+    ctx.strokeStyle = 'rgba(57,255,136,0.25)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+
+    // Earth
+    const earthR = 22;
+    const eGrad = ctx.createRadialGradient(cx-5, cy-5, 2, cx, cy, earthR);
+    eGrad.addColorStop(0, '#1a4060');
+    eGrad.addColorStop(0.5, '#0c2235');
+    eGrad.addColorStop(1, '#060e18');
+    ctx.beginPath(); ctx.arc(cx, cy, earthR, 0, Math.PI*2);
+    ctx.fillStyle = eGrad;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,180,255,0.3)'; ctx.lineWidth = 1;
+    ctx.stroke();
+    // Earth glow
+    const eHalo = ctx.createRadialGradient(cx, cy, earthR, cx, cy, earthR*2.2);
+    eHalo.addColorStop(0, 'rgba(20,80,140,0.15)');
+    eHalo.addColorStop(1, 'transparent');
+    ctx.beginPath(); ctx.arc(cx, cy, earthR*2.2, 0, Math.PI*2);
+    ctx.fillStyle = eHalo; ctx.fill();
+
+    // Orbit traces
+    SATS.forEach((sat, si) => {
+      if (!orbitPositions) return;
+      ctx.beginPath();
+      orbitPositions[si].forEach((p, i) => {
+        const c = eciToCanvas(p, cx, cy, SCALE);
+        if (i === 0) ctx.moveTo(c.x, c.y);
+        else ctx.lineTo(c.x, c.y);
+      });
+      ctx.closePath();
+      ctx.strokeStyle = `${sat.glow}0.12)`;
+      ctx.lineWidth = 0.8;
+      ctx.setLineDash([4, 6]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    });
+
+    // Current sat positions + trails
+    const curPos = SATS.map(sat => getSatPos(animTime, sat));
+    const canvasPos = curPos.map(p => eciToCanvas(p, cx, cy, SCALE));
+
+    // Update trails
+    SATS.forEach((_, si) => {
+      trails[si].push({...canvasPos[si]});
+      if (trails[si].length > TRAIL_LEN) trails[si].shift();
+    });
+
+    // Draw trails
+    SATS.forEach((sat, si) => {
+      const trail = trails[si];
+      if (trail.length < 2) return;
+      for (let i = 1; i < trail.length; i++) {
+        const alpha = (i / trail.length) * 0.6;
+        ctx.beginPath();
+        ctx.moveTo(trail[i-1].x, trail[i-1].y);
+        ctx.lineTo(trail[i].x,   trail[i].y);
+        ctx.strokeStyle = `${sat.glow}${alpha.toFixed(2)})`;
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      }
+    });
+
+    // Laser beam between satellites
+    const dist3d = Math.sqrt(
+      (curPos[0][0]-curPos[1][0])**2 +
+      (curPos[0][1]-curPos[1][1])**2 +
+      (curPos[0][2]-curPos[1][2])**2
+    );
+    const maxBeamDist = r_orbit * 0.02; // ~140km threshold
+    if (dist3d < maxBeamDist * 3) {
+      const beamAlpha = Math.max(0, 1 - dist3d/(maxBeamDist*3));
+      const beamPulse = 0.5 + 0.5 * Math.sin(ts * 0.005);
+
+      // Glow beneath the beam
+      for (let g = 4; g >= 0; g--) {
+        ctx.beginPath();
+        ctx.moveTo(canvasPos[0].x, canvasPos[0].y);
+        ctx.lineTo(canvasPos[1].x, canvasPos[1].y);
+        ctx.strokeStyle = `rgba(240,160,48,${beamAlpha * 0.06 * (g+1) * beamPulse})`;
+        ctx.lineWidth = (g + 1) * 1.5;
+        ctx.stroke();
+      }
+      // Core beam
+      ctx.beginPath();
+      ctx.moveTo(canvasPos[0].x, canvasPos[0].y);
+      ctx.lineTo(canvasPos[1].x, canvasPos[1].y);
+      ctx.strokeStyle = `rgba(255,220,120,${beamAlpha * 0.9 * beamPulse})`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // Satellite dots
+    SATS.forEach((sat, si) => {
+      const cp = canvasPos[si];
+      const pulse = 0.6 + 0.4 * Math.sin(ts * 0.003 + si * Math.PI);
+
+      // Outer glow
+      const glowR = 14 * pulse;
+      const g = ctx.createRadialGradient(cp.x, cp.y, 0, cp.x, cp.y, glowR);
+      g.addColorStop(0, `${sat.glow}0.4)`);
+      g.addColorStop(1, `${sat.glow}0.0)`);
+      ctx.beginPath(); ctx.arc(cp.x, cp.y, glowR, 0, Math.PI*2);
+      ctx.fillStyle = g; ctx.fill();
+
+      // Inner dot
+      ctx.beginPath(); ctx.arc(cp.x, cp.y, 3, 0, Math.PI*2);
+      ctx.fillStyle = sat.color;
+      ctx.shadowBlur = 10; ctx.shadowColor = sat.color;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Label
+      ctx.fillStyle = sat.color;
+      ctx.font = "bold 9px 'Orbitron'";
+      ctx.fillText(`SAT-${sat.label}`, cp.x + 6, cp.y - 6);
+    });
+
+    // Distance readout
+    const distKm = dist3d / 1e3;
+    ctx.fillStyle = 'rgba(90,100,128,0.8)';
+    ctx.font = "9px 'Share Tech Mono'";
+    ctx.fillText(`Δ ${distKm.toFixed(1)} km`, cx - 28, H - 10);
+  }
+
+  requestAnimationFrame(draw);
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────
+loadInitialData();
+</script>
+
+</body>
+</html>

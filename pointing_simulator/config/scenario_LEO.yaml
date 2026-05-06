@@ -1,0 +1,50 @@
+simulation:
+  duration: 400.0
+  dt: 0.01
+  random_seed: 100
+
+satellites:
+  sat_A:
+    altitude: 550000.0     # m
+    inclination: 53.0
+    raan: 0.0
+    initial_phase: 0.0
+  sat_B:
+    altitude: 550000.0
+    inclination: 53.0
+    raan: 1.0
+    initial_phase: 90.0
+
+laser_terminal:
+  wavelength: 0.0000015500
+  beam_divergence: 0.00002
+  max_pointing_range: 5.0
+  fine_pointing_bw: 1000
+
+error_model:
+  ephemeris:
+    position_std: 100.0
+    velocity_std: 0.2
+  attitude:
+    static_bias: 0.000005
+    jitter_amplitude: 0.000003
+    jitter_freq: 80
+  timing:
+    clock_offset: 0.0000005
+
+PAT:
+  acquisition_threshold: 0.00005
+  tracking_threshold: 0.00001
+  scan_pattern: "spiral"
+  scan_step: 0.000005
+  snr_capture: 7.5
+  snr_maintain: 11.0
+
+microwave:
+  P_t_dBm: 43
+  freq_Hz: 26000000000.0
+  bandwidth_search: 50000.0
+  bandwidth_track: 100000000.0
+  scan_step_size_A: 73
+  scan_step_size_B: 79
+  dwell_time: 0.05

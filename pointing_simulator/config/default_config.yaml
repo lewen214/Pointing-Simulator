@@ -1,0 +1,53 @@
+simulation:
+  duration: 600.0          # seconds
+  dt: 0.05                 # time step (s)
+  random_seed: 42
+
+satellites:
+  sat_A:
+    altitude: 600000.0     # m  (600 km)
+    inclination: 53.0      # deg
+    raan: 0.0              # deg
+    initial_phase: 0.0     # deg
+  sat_B:
+    altitude: 600000.0
+    inclination: 53.1
+    raan: 0.5
+    initial_phase: 0.1
+
+laser_terminal:
+  wavelength: 0.0000015500 # m  (1550 nm)
+  beam_divergence: 0.00002 # rad (20 urad)
+  max_pointing_range: 5.0  # deg
+  fine_pointing_bw: 1000   # Hz
+
+error_model:
+  ephemeris:
+    # post-MCCF accuracy: Ka-band guidance ~2 urad @ 68 km -> ~0.14 m; use 2 m for margin
+    position_std: 2.0      # m
+    velocity_std: 0.005    # m/s
+  attitude:
+    static_bias: 0.00001   # rad
+    jitter_amplitude: 0.000005  # rad
+    jitter_freq: 100       # Hz
+  timing:
+    clock_offset: 0.000001 # s
+
+PAT:
+  # acquisition: detector FOV ~200 urad (10x beam divergence)
+  # tracking entry: receiver FOV 60 urad; PI then reduces to ~15 urad RMS
+  acquisition_threshold: 0.0002    # rad  (200 urad)
+  tracking_threshold: 0.00006      # rad  (60 urad)
+  scan_pattern: "spiral"
+  scan_step: 0.000005              # rad
+  snr_capture: 7.5                 # dB
+  snr_maintain: 11.0               # dB
+
+microwave:
+  P_t_dBm: 43
+  freq_Hz: 26000000000.0           # 26 GHz Ka-band
+  bandwidth_search: 50000.0        # Hz
+  bandwidth_track: 100000000.0     # Hz
+  scan_step_size_A: 73             # co-prime prime numbers
+  scan_step_size_B: 79
+  dwell_time: 0.05                 # s per grid point
