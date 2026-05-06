@@ -1,0 +1,1705 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>任务协同卫星编队激光自组网仿真平台</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#02040f; --bg1:#05091a; --bg2:#080e24; --bg3:#0b1330;
+  --border:#0f1e45; --border2:#1a3070;
+  --cyan:#00e5ff; --cyan2:#80f4ff;
+  --gold:#ffd700; --gold2:#ffec80;
+  --green:#39ff14; --red:#ff3344; --orange:#ff9800; --blue:#4fc3f7;
+  --text:#b0c4de; --text2:#6888b0; --text3:#3a5080;
+  --mono:'Share Tech Mono',monospace; --sans:'Noto Sans SC',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--sans);}
+
+#app{
+  display:grid;
+  grid-template-rows:52px 1fr 168px 48px;
+  grid-template-columns:230px 1fr 290px;
+  grid-template-areas:"hdr hdr hdr""left mid right""left chart right""ctrl ctrl ctrl";
+  width:100vw;height:100vh;
+}
+
+/* ── Header ── */
+#hdr{
+  grid-area:hdr;
+  background:linear-gradient(90deg,var(--bg2) 0%,#061535 40%,var(--bg2) 100%);
+  border-bottom:1px solid var(--border2);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 18px;position:relative;
+}
+#hdr::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--cyan),var(--gold),var(--cyan),transparent);}
+.hdr-title{font-size:14px;font-weight:700;letter-spacing:2px;color:var(--cyan2);text-shadow:0 0 12px var(--cyan);}
+.hdr-title span{color:var(--gold);}
+.hdr-clock{font-family:var(--mono);font-size:12px;color:var(--text2);}
+.hdr-status{display:flex;gap:12px;align-items:center;}
+.status-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:blink 1.5s ease-in-out infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.hdr-status-text{font-size:11px;color:var(--green);font-family:var(--mono);}
+
+/* ── Left Panel ── */
+#left{grid-area:left;background:var(--bg1);border-right:1px solid var(--border);overflow-y:auto;padding:10px 8px;}
+#left::-webkit-scrollbar{width:4px;}
+#left::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+.panel-title{font-size:10px;font-weight:700;letter-spacing:2px;color:var(--text3);
+  text-transform:uppercase;padding:4px 6px 8px;margin-bottom:4px;border-bottom:1px solid var(--border);}
+.phase-step{padding:8px 8px 6px;margin-bottom:3px;border-radius:4px;cursor:pointer;
+  border:1px solid transparent;transition:all .3s;position:relative;overflow:hidden;}
+.phase-step::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;
+  background:var(--border2);transition:background .3s;}
+.phase-step.active{background:rgba(0,229,255,.07);border-color:var(--cyan);}
+.phase-step.active::before{background:var(--cyan);box-shadow:0 0 8px var(--cyan);}
+.phase-step.done{background:rgba(57,255,20,.04);}
+.phase-step.done::before{background:var(--green);}
+.phase-num{font-family:var(--mono);font-size:9px;color:var(--text3);margin-bottom:2px;}
+.phase-name{font-size:11px;font-weight:500;color:var(--text);line-height:1.3;}
+.phase-step.active .phase-name{color:var(--cyan2);}
+.phase-step.done .phase-name{color:var(--green);}
+.phase-status{font-family:var(--mono);font-size:9px;color:var(--text2);margin-top:2px;}
+.phase-desc{font-size:9px;color:var(--text3);margin-top:3px;line-height:1.4;display:none;}
+.phase-step.active .phase-desc{display:block;color:var(--text2);}
+
+.param-block{margin-top:10px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:8px;}
+.param-title{font-size:9px;font-weight:700;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;}
+.param-row{display:flex;justify-content:space-between;align-items:baseline;padding:2px 0;border-bottom:1px solid rgba(15,30,69,.6);}
+.param-row:last-child{border-bottom:none;}
+.param-label{font-size:10px;color:var(--text2);}
+.param-value{font-family:var(--mono);font-size:10px;color:var(--gold2);}
+
+/* ── Middle ── */
+#mid{grid-area:mid;position:relative;background:var(--bg);overflow:hidden;}
+#canvas3d{width:100%;height:100%;display:block;}
+.sat-label{position:absolute;font-family:var(--mono);font-size:10px;padding:2px 5px;
+  border-radius:2px;pointer-events:none;transition:opacity .4s;}
+#lbl-a{color:var(--gold);background:rgba(255,215,0,.12);border:1px solid rgba(255,215,0,.3);}
+#lbl-b{color:var(--cyan);background:rgba(0,229,255,.10);border:1px solid rgba(0,229,255,.25);}
+
+.phase-overlay{position:absolute;top:10px;left:50%;transform:translateX(-50%);
+  background:rgba(2,4,15,.88);border:1px solid var(--cyan);border-radius:4px;
+  padding:6px 16px;pointer-events:none;text-align:center;min-width:260px;max-width:460px;}
+.phase-overlay-title{font-size:12px;font-weight:600;color:var(--cyan2);letter-spacing:1px;}
+.phase-overlay-sub{font-family:var(--mono);font-size:9px;color:var(--text2);margin-top:3px;line-height:1.4;}
+
+/* Canvas info chips */
+.canvas-chips{position:absolute;bottom:18px;left:12px;display:flex;gap:6px;pointer-events:none;}
+.chip{font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:10px;
+  border:1px solid var(--border2);background:rgba(2,4,15,.75);}
+.chip.active{border-color:var(--green);color:var(--green);}
+.chip.inactive{color:var(--text3);}
+
+/* Scan capture flash — green */
+.capture-flash{position:absolute;inset:0;background:rgba(57,255,20,.32);
+  pointer-events:none;opacity:0;}
+
+.progress-bar-outer{position:absolute;bottom:8px;right:12px;left:12px;
+  height:2px;background:var(--border);border-radius:2px;}
+.progress-bar-inner{height:100%;border-radius:2px;
+  background:linear-gradient(90deg,var(--cyan),var(--gold));
+  box-shadow:0 0 5px var(--cyan);transition:width .25s linear;}
+
+/* ── Right Panel ── */
+#right{grid-area:right;background:var(--bg1);border-left:1px solid var(--border);overflow-y:auto;padding:10px 8px;}
+#right::-webkit-scrollbar{width:4px;}
+#right::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+
+.metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px;}
+.metric-card{background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:6px 8px;position:relative;overflow:hidden;}
+.metric-card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:var(--cyan);opacity:.25;}
+.metric-label{font-size:9px;color:var(--text3);letter-spacing:.5px;margin-bottom:2px;}
+.metric-value{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--cyan2);
+  text-shadow:0 0 8px rgba(0,229,255,.4);transition:all .35s;}
+.metric-unit{font-size:8px;color:var(--text2);margin-left:1px;}
+.metric-card.good .metric-value{color:var(--green);text-shadow:0 0 8px var(--green);}
+.metric-card.warn .metric-value{color:var(--orange);text-shadow:0 0 8px var(--orange);}
+.metric-card.bad  .metric-value{color:var(--red);text-shadow:0 0 8px var(--red);}
+
+.pt-box{background:var(--bg2);border:1px solid var(--border2);border-radius:4px;
+  padding:8px;margin-bottom:8px;border-left:2px solid var(--cyan);}
+.pt-box-title{font-size:9px;font-weight:700;letter-spacing:1.5px;color:var(--cyan);
+  text-transform:uppercase;margin-bottom:6px;}
+.pt-section-hd{font-size:8px;letter-spacing:1px;color:var(--text3);text-transform:uppercase;
+  margin:5px 0 3px;padding-top:4px;border-top:1px solid var(--border);}
+.pt-section-hd:first-of-type{border-top:none;margin-top:0;}
+.pt-row{display:flex;justify-content:space-between;align-items:center;padding:1.5px 0;}
+.pt-label{font-size:9px;color:var(--text2);}
+.pt-val{font-family:var(--mono);font-size:10px;color:var(--gold2);}
+.pt-val.hi{color:var(--cyan2);}
+.pt-val.ok{color:var(--green);}
+.pt-val.warn{color:var(--orange);}
+.pt-vec{font-family:var(--mono);font-size:9px;color:var(--text);line-height:1.6;
+  background:rgba(0,0,0,.3);border-radius:2px;padding:3px 5px;margin-top:2px;}
+.pt-highlight{color:var(--gold2);}
+
+.state-machine{background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:8px;margin-bottom:8px;}
+.sm-title{font-size:9px;font-weight:700;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;}
+.sm-row{display:flex;align-items:center;gap:3px;margin-bottom:3px;}
+.sm-state{flex:1;text-align:center;font-family:var(--mono);font-size:9px;
+  padding:3px 2px;border-radius:2px;border:1px solid var(--border);
+  background:var(--bg3);color:var(--text3);transition:all .4s;line-height:1.2;}
+.sm-state.active{background:rgba(0,229,255,.12);border-color:var(--cyan);color:var(--cyan2);box-shadow:0 0 6px rgba(0,229,255,.2);}
+.sm-state.done{background:rgba(57,255,20,.06);border-color:var(--green);color:var(--green);}
+.sm-arrow{color:var(--text3);font-size:9px;}
+
+.algo-box{background:var(--bg2);border:1px solid var(--border2);border-radius:4px;
+  padding:8px;margin-bottom:8px;border-left:2px solid var(--gold);}
+.algo-title{font-size:9px;font-weight:700;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase;margin-bottom:5px;}
+.algo-formula{font-family:var(--mono);font-size:10px;color:var(--gold2);line-height:1.7;}
+.algo-note{font-size:9px;color:var(--text2);margin-top:4px;line-height:1.5;}
+
+.link-status{background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:8px;margin-bottom:8px;}
+.link-row{display:flex;justify-content:space-between;align-items:center;
+  padding:3px 0;border-bottom:1px solid rgba(15,30,69,.5);font-size:10px;}
+.link-row:last-child{border-bottom:none;}
+.link-name{color:var(--text2);}
+.link-val{font-family:var(--mono);}
+.link-val.on{color:var(--green);} .link-val.off{color:var(--red);} .link-val.scan{color:var(--orange);}
+
+/* ── Chart ── */
+#chart{grid-area:chart;background:var(--bg1);border-top:1px solid var(--border);
+  display:grid;grid-template-columns:1fr 1fr;}
+#chart-snr,#chart-tput{width:100%;height:100%;}
+
+/* ── Controls ── */
+#ctrl{grid-area:ctrl;background:var(--bg2);border-top:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;gap:10px;padding:0 14px;}
+.ctrl-btn{background:rgba(0,229,255,.07);border:1px solid var(--border2);color:var(--text);
+  font-family:var(--sans);font-size:11px;padding:6px 12px;border-radius:3px;
+  cursor:pointer;transition:all .2s;letter-spacing:.5px;}
+.ctrl-btn:hover{background:rgba(0,229,255,.15);border-color:var(--cyan);color:var(--cyan2);}
+.ctrl-btn.primary{background:rgba(255,215,0,.1);border-color:var(--gold);color:var(--gold2);}
+.ctrl-btn.primary:hover{background:rgba(255,215,0,.2);}
+.ctrl-btn.active{background:rgba(57,255,20,.1);border-color:var(--green);color:var(--green);}
+.ctrl-sep{width:1px;height:22px;background:var(--border);}
+.ctrl-lbl{font-size:10px;color:var(--text3);letter-spacing:1px;}
+.ctrl-phase-display{font-family:var(--mono);font-size:11px;color:var(--cyan);min-width:110px;text-align:center;}
+.speed-btn{background:transparent;border:1px solid var(--border);color:var(--text2);
+  font-family:var(--mono);font-size:10px;padding:4px 7px;border-radius:2px;cursor:pointer;transition:all .2s;}
+.speed-btn:hover,.speed-btn.sel{border-color:var(--blue);color:var(--blue);background:rgba(79,195,247,.08);}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ── Header ── -->
+<header id="hdr">
+  <div class="hdr-title">任务协同卫星编队 <span>激光自组网</span> 仿真平台</div>
+  <div class="hdr-status"><div class="status-dot"></div><span class="hdr-status-text" id="sys-status">系统运行中</span></div>
+  <div class="hdr-clock" id="clock">--:--:-- UTC</div>
+</header>
+
+<!-- ── Left ── -->
+<aside id="left">
+  <div class="panel-title">正常建链流程</div>
+
+  <div class="phase-step active" id="step-0" onclick="jumpPhase(0)">
+    <div class="phase-num">阶段 01</div>
+    <div class="phase-name">卫星编队轨道建立</div>
+    <div class="phase-status" id="st-0">轨道初始化中...</div>
+    <div class="phase-desc">建立双星编队几何关系，初始化坐标变换链，计算初始视线矢量 VLOS = PB−PA</div>
+  </div>
+  <div class="phase-step" id="step-1" onclick="jumpPhase(1)">
+    <div class="phase-num">阶段 02</div>
+    <div class="phase-name">微波邻居发现握手</div>
+    <div class="phase-status" id="st-1">等待触发</div>
+    <div class="phase-desc">Ka广播自动发现→CFAR捕获SNR>7.5dB→MCCF帧交换轨道参数→解算激光粗指向</div>
+  </div>
+  <div class="phase-step" id="step-2" onclick="jumpPhase(2)">
+    <div class="phase-num">阶段 03</div>
+    <div class="phase-name">微波辅助激光精扫建链</div>
+    <div class="phase-status" id="st-2">等待触发</div>
+    <div class="phase-desc">MW提供粗指向→激光从近邻格点出发精扫→m=10步碰撞捕获→SNR>11dB锁定</div>
+  </div>
+  <div class="phase-step" id="step-3" onclick="jumpPhase(3)">
+    <div class="phase-num">阶段 04</div>
+    <div class="phase-name">异构协同激光建链</div>
+    <div class="phase-status" id="st-3">等待触发</div>
+    <div class="phase-desc">激光精扫锁定，TSH异构流量分发，控制面/数据面分离，1Gbps全速运行</div>
+  </div>
+  <div class="phase-step" id="step-4" onclick="jumpPhase(4)">
+    <div class="phase-num">阶段 05</div>
+    <div class="phase-name">容灾保底自愈重构</div>
+    <div class="phase-status" id="st-4">等待触发</div>
+    <div class="phase-desc">激光链路中断→微波保底→"弃车保帅"→互质重扫&lt;1s恢复</div>
+  </div>
+
+  <div style="margin:10px 0 5px;border-top:1px solid var(--border);padding-top:8px">
+    <div class="panel-title" style="border:none;padding:0 6px 5px;color:var(--blue);letter-spacing:2px">算法演示</div>
+  </div>
+  <div class="phase-step" id="step-5" onclick="jumpPhase(5)">
+    <div class="phase-num">演示</div>
+    <div class="phase-name">相控阵互质盲扫捕获</div>
+    <div class="phase-status" id="st-5">等待触发</div>
+    <div class="phase-desc">无先验信息→双星同步互质盲扫，ΔsA=7,ΔsB=13，斐波那契等面积格点，gcd=1保证100%碰撞</div>
+  </div>
+
+  <div style="margin:10px 0 5px;border-top:1px solid var(--border);padding-top:8px">
+    <div class="panel-title" style="border:none;padding:0 6px 5px;color:var(--red);letter-spacing:2px">故障处置演示</div>
+  </div>
+  <div class="phase-step" id="step-6" onclick="jumpPhase(6)">
+    <div class="phase-num">故障 01</div>
+    <div class="phase-name">激光指向误差突变</div>
+    <div class="phase-status" id="st-6">等待触发</div>
+    <div class="phase-desc">热变形导致指向误差超限→CFAR丢帧→PAT精扫螺旋重捕→误差收敛→稳态恢复</div>
+  </div>
+  <div class="phase-step" id="step-7" onclick="jumpPhase(7)">
+    <div class="phase-num">故障 02</div>
+    <div class="phase-name">空间死锁与互质解锁</div>
+    <div class="phase-status" id="st-7">等待触发</div>
+    <div class="phase-desc">演示gcd(4,4)=4传统方案周期死锁，对比gcd(7,13)=1互质方案保证破锁</div>
+  </div>
+  <div class="phase-step" id="step-8" onclick="jumpPhase(8)">
+    <div class="phase-num">故障 03</div>
+    <div class="phase-name">双链路拥塞QoS弃车保帅</div>
+    <div class="phase-status" id="st-8">等待触发</div>
+    <div class="phase-desc">激光+微波同时拥塞→TSH优先队列丢弃低优先→保障λH=80Mbps高优先业务连续</div>
+  </div>
+
+  <div class="param-block">
+    <div class="param-title">轨道参数</div>
+    <div class="param-row"><span class="param-label">轨道高度</span><span class="param-value">600 km</span></div>
+    <div class="param-row"><span class="param-label">倾斜角 A/B</span><span class="param-value">53.0° / 53.1°</span></div>
+    <div class="param-row"><span class="param-label">升交点 RAAN A/B</span><span class="param-value">0.0° / 27.5°</span></div>
+    <div class="param-row"><span class="param-label">星间距离</span><span class="param-value">~3000 km</span></div>
+    <div class="param-row"><span class="param-label">轨道周期</span><span class="param-value">5801 s</span></div>
+  </div>
+
+  <div class="param-block" style="margin-top:6px">
+    <div class="param-title">链路参数</div>
+    <div class="param-row"><span class="param-label">激光波长</span><span class="param-value">1550 nm</span></div>
+    <div class="param-row"><span class="param-label">激光功率</span><span class="param-value">1 W (30 dBm)</span></div>
+    <div class="param-row"><span class="param-label">激光散角</span><span class="param-value">15 μrad</span></div>
+    <div class="param-row"><span class="param-label">微波频段</span><span class="param-value">Ka 26 GHz</span></div>
+    <div class="param-row"><span class="param-label">激光速率</span><span class="param-value">1 Gbps</span></div>
+    <div class="param-row"><span class="param-label">微波带宽</span><span class="param-value">100 MHz</span></div>
+  </div>
+</aside>
+
+<!-- ── 3D Canvas ── -->
+<main id="mid">
+  <canvas id="canvas3d"></canvas>
+  <div id="lbl-a" class="sat-label">▲ SAT-A</div>
+  <div id="lbl-b" class="sat-label">▲ SAT-B</div>
+  <div class="phase-overlay">
+    <div class="phase-overlay-title" id="overlay-title">卫星编队轨道建立</div>
+    <div class="phase-overlay-sub" id="overlay-sub">建立双星相对几何关系，初始化坐标变换链 ECI→体坐标系→激光终端坐标系</div>
+  </div>
+  <div class="canvas-chips" id="canvas-chips">
+    <div class="chip inactive" id="chip-fibo">斐波那契格点</div>
+    <div class="chip inactive" id="chip-scan">盲扫进行中</div>
+    <div class="chip inactive" id="chip-mw">Ka微波</div>
+    <div class="chip inactive" id="chip-laser">1550nm激光</div>
+  </div>
+  <div class="capture-flash" id="cap-flash"></div>
+  <div class="progress-bar-outer"><div class="progress-bar-inner" id="phase-progress" style="width:0%"></div></div>
+</main>
+
+<!-- ── Right Panel ── -->
+<aside id="right">
+  <div class="panel-title">实时指标</div>
+  <div class="metrics-grid">
+    <div class="metric-card" id="mc-snr"><div class="metric-label">信噪比 SNR</div><div class="metric-value" id="mv-snr">--<span class="metric-unit"> dB</span></div></div>
+    <div class="metric-card" id="mc-tput"><div class="metric-label">吞吐量</div><div class="metric-value" id="mv-tput">--<span class="metric-unit"> Mbps</span></div></div>
+    <div class="metric-card" id="mc-delay"><div class="metric-label">时延 RTT</div><div class="metric-value" id="mv-delay">--<span class="metric-unit"> ms</span></div></div>
+    <div class="metric-card" id="mc-ber"><div class="metric-label">捕获概率</div><div class="metric-value" id="mv-ber">--<span class="metric-unit"> %</span></div></div>
+  </div>
+
+  <div class="pt-box">
+    <div class="pt-box-title">▶ 位置指向解算</div>
+    <div class="pt-section-hd">位置矢量差 ΔP = PB − PA</div>
+    <div class="pt-vec" id="pt-vec">
+      <span class="pt-highlight" id="pt-dp-x">--</span>,
+      <span class="pt-highlight" id="pt-dp-y">--</span>,
+      <span class="pt-highlight" id="pt-dp-z">--</span> km
+    </div>
+    <div class="pt-row" style="margin-top:3px">
+      <span class="pt-label">星间距离 |ΔP|</span>
+      <span class="pt-val hi" id="pt-dist">-- km</span>
+    </div>
+    <div class="pt-section-hd">视线角 (LOS in 体坐标系)</div>
+    <div class="pt-row">
+      <span class="pt-label">方位角 Az</span>
+      <span class="pt-val hi" id="pt-az">--°</span>
+    </div>
+    <div class="pt-row">
+      <span class="pt-label">俯仰角 El</span>
+      <span class="pt-val hi" id="pt-el">--°</span>
+    </div>
+    <div class="pt-section-hd">Voronoi 天线面分配</div>
+    <div class="pt-row">
+      <span class="pt-label">激活面</span>
+      <span class="pt-val ok" id="pt-face">--</span>
+    </div>
+    <div class="pt-row">
+      <span class="pt-label">面法向量</span>
+      <span class="pt-val" id="pt-fnorm" style="color:var(--text2);font-size:9px">--</span>
+    </div>
+    <div class="pt-row">
+      <span class="pt-label">离轴角</span>
+      <span class="pt-val" id="pt-offaxis">--°</span>
+    </div>
+    <div class="pt-section-hd">斐波那契格点扫描</div>
+    <div class="pt-row">
+      <span class="pt-label">SAT-A 格点 iA</span>
+      <span class="pt-val" id="pt-ia">-- / 300</span>
+    </div>
+    <div class="pt-row">
+      <span class="pt-label">SAT-B 格点 iB</span>
+      <span class="pt-val" id="pt-ib">-- / 300</span>
+    </div>
+    <div class="pt-row">
+      <span class="pt-label">步数 m | gcd</span>
+      <span class="pt-val ok" id="pt-step">-- | 1</span>
+    </div>
+    <div class="pt-row">
+      <span class="pt-label">碰撞状态</span>
+      <span class="pt-val" id="pt-collision" style="color:var(--text3)">等待触发</span>
+    </div>
+  </div>
+
+  <div class="state-machine">
+    <div class="sm-title">PAT 状态机</div>
+    <div class="sm-row">
+      <div class="sm-state" id="sm-0">MW<br>锁定</div>
+      <div class="sm-arrow">→</div>
+      <div class="sm-state" id="sm-1">参数<br>交换</div>
+      <div class="sm-arrow">→</div>
+      <div class="sm-state" id="sm-2">激光<br>扫描</div>
+    </div>
+    <div class="sm-row" style="margin-top:2px">
+      <div class="sm-state" id="sm-3">异构<br>跟踪</div>
+      <div class="sm-arrow">→</div>
+      <div class="sm-state" id="sm-4">MW<br>保底</div>
+      <div class="sm-arrow">→</div>
+      <div class="sm-state" id="sm-5">自愈<br>重构</div>
+    </div>
+  </div>
+
+  <div class="algo-box">
+    <div class="algo-title" id="algo-title">正四面体四面相控阵</div>
+    <div class="algo-formula" id="algo-formula">n₁=(1,1,1)/√3<br>n₂=(1,−1,−1)/√3<br>n₃=(−1,1,−1)/√3<br>n₄=(−1,−1,1)/√3</div>
+    <div class="algo-note" id="algo-note">每面覆盖最大离轴角 54.74°，四面体对称保证全天球无盲区</div>
+  </div>
+
+  <div class="link-status">
+    <div class="sm-title">链路状态</div>
+    <div class="link-row"><span class="link-name">Ka微波控制链路</span><span class="link-val off" id="lk-mw">○ 未建立</span></div>
+    <div class="link-row"><span class="link-name">1550nm激光数据链路</span><span class="link-val off" id="lk-laser">○ 未建立</span></div>
+    <div class="link-row"><span class="link-name">MCCF帧交互</span><span class="link-val off" id="lk-mccf">○ 未激活</span></div>
+    <div class="link-row"><span class="link-name">TSH流量分发</span><span class="link-val off" id="lk-tsh">○ 未激活</span></div>
+  </div>
+
+  <div class="param-block">
+    <div class="param-title">蒙特卡洛 N=10000</div>
+    <div class="param-row"><span class="param-label">互质方案成功率</span><span class="param-value" style="color:var(--green)">100%</span></div>
+    <div class="param-row"><span class="param-label">传统方案成功率</span><span class="param-value" style="color:var(--red)">98.1%</span></div>
+    <div class="param-row"><span class="param-label">MW辅助精扫步数</span><span class="param-value">10步 (~3s)</span></div>
+    <div class="param-row"><span class="param-label">盲扫平均步数</span><span class="param-value">~127步 (~38s)</span></div>
+    <div class="param-row"><span class="param-label">加速比</span><span class="param-value" style="color:var(--green)">13× 加速</span></div>
+  </div>
+</aside>
+
+<!-- ── Charts ── -->
+<div id="chart">
+  <div id="chart-snr"></div>
+  <div id="chart-tput"></div>
+</div>
+
+<!-- ── Controls ── -->
+<footer id="ctrl">
+  <span class="ctrl-lbl">速度</span>
+  <button class="speed-btn" onclick="setSpeed(1)">1×</button>
+  <button class="speed-btn sel" onclick="setSpeed(2)">2×</button>
+  <button class="speed-btn" onclick="setSpeed(4)">4×</button>
+  <div class="ctrl-sep"></div>
+  <button class="ctrl-btn" onclick="prevPhase()">◀ 上一阶段</button>
+  <div class="ctrl-phase-display" id="phase-display">阶段 1 / 9</div>
+  <button class="ctrl-btn" onclick="nextPhase()">下一阶段 ▶</button>
+  <div class="ctrl-sep"></div>
+  <button class="ctrl-btn primary" id="auto-btn" onclick="toggleAuto()">▶ 自动演示</button>
+  <button class="ctrl-btn" onclick="resetDemo()">⟳ 重置</button>
+  <div class="ctrl-sep"></div>
+  <span class="ctrl-lbl" id="sim-time-label" style="font-family:var(--mono);color:var(--cyan);font-size:10px">T+0s</span>
+</footer>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// ORBITAL CONSTANTS
+// ═══════════════════════════════════════════════════════════════════
+const MU    = 3.986004418e14;
+const RE_M  = 6371000;
+const ALT_M = 600000;
+const R_ORB = RE_M + ALT_M;
+const T_ORB = 2 * Math.PI * Math.sqrt(Math.pow(R_ORB,3)/MU);
+const OMEGA = 2 * Math.PI / T_ORB;
+const SCALE = 2.0 / RE_M;
+const R_E3D = 2.0;
+const R_S3D = R_ORB * SCALE;
+const DEG   = Math.PI / 180;
+const PHI_G = (1 + Math.sqrt(5)) / 2;
+
+const SATS = [
+  { incl:53.0*DEG, raan: 0.0*DEG, phase0:0,          color:0xffd700, name:'SAT-A', label:'lbl-a' },
+  { incl:53.1*DEG, raan:27.5*DEG, phase0:Math.PI*0.6, color:0x00e5ff, name:'SAT-B', label:'lbl-b' },
+];
+
+// ═══════════════════════════════════════════════════════════════════
+// TETRAHEDRAL FACE NORMALS
+// ═══════════════════════════════════════════════════════════════════
+const FACE_NORMALS = [
+  new THREE.Vector3( 1, 1, 1).normalize(),
+  new THREE.Vector3( 1,-1,-1).normalize(),
+  new THREE.Vector3(-1, 1,-1).normalize(),
+  new THREE.Vector3(-1,-1, 1).normalize(),
+];
+const FACE_COLORS  = [0xff6600, 0x00bbff, 0xffdd00, 0x44ff88];
+const FACE_NAMES   = ['n₁=(1,1,1)/√3','n₂=(1,−1,−1)/√3','n₃=(−1,1,−1)/√3','n₄=(−1,−1,1)/√3'];
+const FACE_SHORT   = ['n₁','n₂','n₃','n₄'];
+
+// ═══════════════════════════════════════════════════════════════════
+// FIBONACCI SPHERE PRECOMPUTE
+// ═══════════════════════════════════════════════════════════════════
+const N_FIBO = 300;
+const FIBO_R = 0.20;
+const fiboLocalPts = [];
+const fiboFaceIdx  = [];
+
+for (let i = 0; i < N_FIBO; i++) {
+  const alpha = (2*Math.PI*i/PHI_G) % (2*Math.PI);
+  const beta  = Math.acos(1 - (2*i+1)/N_FIBO);
+  const pt = new THREE.Vector3(
+    FIBO_R * Math.sin(beta)*Math.cos(alpha),
+    FIBO_R * Math.cos(beta),
+    FIBO_R * Math.sin(beta)*Math.sin(alpha),
+  );
+  fiboLocalPts.push(pt);
+  const dir = pt.clone().normalize();
+  let best=0, bd=-Infinity;
+  FACE_NORMALS.forEach((n,fi)=>{ const d=dir.dot(n); if(d>bd){bd=d;best=fi;} });
+  fiboFaceIdx.push(best);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PHASES (9 total)
+// ═══════════════════════════════════════════════════════════════════
+const PHASES = [
+  { // 0: orbit
+    name:'卫星编队轨道建立',
+    sub: 'VLOS=PB−PA，ECI→体坐标系→激光终端坐标系，Voronoi面分配初始化',
+    dur: 12000, smActive:[], smDone:[],
+    algo_title:'坐标变换链',
+    algo_formula:'VLOS = Rlaser·Rbody·(PB−PA)\nRbody: 轨道ECI→星体系\nRlaser: 星体系→激光终端\nAz=atan2(Vy,Vx)\nEl=asin(Vz/|V|)',
+    algo_note:'正四面体法向量 n₁~n₄，Voronoi准则：\n激活面 = argmax(nᵢ·VLOS/|VLOS|)',
+    metrics:{snr:'-36.7',tput:'0',delay:'—',ber:'0'},
+    linkMW:'off',linkLaser:'off',linkMCCF:'off',linkTSH:'off',
+    statusText:'轨道初始化中...',
+    chips:{fibo:false,scan:false,mw:false,laser:false},
+  },
+  { // 1: MW handshake FIRST
+    name:'微波邻居发现握手',
+    sub: 'Ka宽波束广播→CFAR捕获SNR>7.5dB→MCCF帧交换位置姿态→解算激光粗指向参数',
+    dur: 18000, smActive:[0,1], smDone:[],
+    algo_title:'CFAR捕获与MCCF握手',
+    algo_formula:'Ka@3000km SNR=24.5dB\n捕获门限: 7.5 dB (CFAR)\nMCCF帧: 前导+P(12B)+Q(16B)\n微波覆盖角: >45° 无需精对准\n广播模式→自动邻居发现',
+    algo_note:'MCCF帧交换后得到：\n· 精确轨道位置矢量 P\n· 姿态四元数 Q\n· 激光LOS预测方向\n→ 近邻Fibonacci格点起始索引',
+    metrics:{snr:'24.5',tput:'100',delay:'20',ber:'89'},
+    linkMW:'scan',linkLaser:'off',linkMCCF:'off',linkTSH:'off',
+    statusText:'微波握手进行中...',
+    chips:{fibo:false,scan:false,mw:true,laser:false},
+  },
+  { // 2: MW-assisted precision scan
+    name:'微波辅助激光精扫建链',
+    sub: 'MW粗指向→激光从近邻格点iA₀=100,iB₀=40出发精扫→m=10步碰撞捕获→SNR>11dB稳态锁定',
+    dur: 20000, smActive:[0,1,2], smDone:[],
+    algo_title:'微波辅助激光精扫',
+    algo_formula:'辅助起始: iA₀=100, iB₀=40\nΔsA=7, ΔsB=13, gcd(7,13)=1\n碰撞: m=10 @iAB=170\n精扫时间≈3s  vs 盲扫≈38s\n加速比 ~13×',
+    algo_note:'MW提供粗指向后激光从近邻\nFibonacci格点出发精扫\nm=10步碰撞捕获，SNR>11dB\n比盲扫快13倍，全过程<3秒',
+    metrics:{snr:'11.2',tput:'0',delay:'—',ber:'45'},
+    linkMW:'on',linkLaser:'off',linkMCCF:'on',linkTSH:'off',
+    statusText:'激光精扫中...',
+    chips:{fibo:true,scan:true,mw:true,laser:false},
+  },
+  { // 3: full laser link
+    name:'异构协同激光建链',
+    sub: '激光精扫SNR>11dB稳态跟踪，TSH零拷贝分发，λH=80Mbps优先，1Gbps全速',
+    dur: 20000, smActive:[0,1,2,3], smDone:[],
+    algo_title:'TSH 异构流量分发',
+    algo_formula:'TSH=TC(3bit)+LP(2bit)+TTL(3bit)\nλH=80Mbps→激光优先\nC_MW=150Mbps→保底\n零拷贝(Zero-Copy)指针分发\n控制面(MW)/数据面(激光)',
+    algo_note:'SNR=42.1dB@3000km，增益42dBi\n激光散角15μrad，指向精度~1μrad\nFEC+PN码匹配滤波 BER<10⁻¹²',
+    metrics:{snr:'42.1',tput:'1000',delay:'12',ber:'100'},
+    linkMW:'on',linkLaser:'on',linkMCCF:'on',linkTSH:'on',
+    statusText:'异构稳态运行',
+    chips:{fibo:false,scan:false,mw:true,laser:true},
+  },
+  { // 4: disaster recovery
+    name:'容灾保底自愈重构',
+    sub: '激光中断→MW 150Mbps接管→"弃车保帅"→互质重扫<1s激光自愈恢复',
+    dur: 28000, smActive:[0,1,4,5], smDone:[0,1,2,3],
+    algo_title:'容灾自愈策略',
+    algo_formula:'激光中断→MW保底(150Mbps)\n自愈延迟: <1s (互质方案)\n传统盲区: ~85s\n死锁概率: 0%\n"弃车保帅": 丢低优保高优',
+    algo_note:'自愈流程: LINK_FAIL→MW_LOCK\n→PARAM_EXCH→LASER_SCAN\n→HETERO_TRACK (重走PAT)\n整个过程<1秒',
+    metrics:{snr:'24.5',tput:'150',delay:'20',ber:'100'},
+    linkMW:'on',linkLaser:'off',linkMCCF:'on',linkTSH:'on',
+    statusText:'自愈重构中...',
+    chips:{fibo:false,scan:false,mw:true,laser:false},
+  },
+  { // 5: blind scan DEMO
+    name:'相控阵互质盲扫捕获（算法演示）',
+    sub: '无先验信息→双星同步互质盲扫，ΔsA=7,ΔsB=13，斐波那契等面积格点，gcd(7,13)=1保证100%碰撞',
+    dur: 30000, smActive:[2], smDone:[],
+    algo_title:'互质步长扫描算法',
+    algo_formula:'iᵥ(m) = (i₀ᵥ + m·Δsᵥ) mod N\nΔsA=7, ΔsB=13\ngcd(7,13)=1 → 碰撞率100%\nαᵢ=2πi/φ mod 2π\nβᵢ=arccos(1−(2i+1)/N)',
+    algo_note:'斐波那契格点等面积分布\n互质步长保证双星100%碰撞\n盲扫平均~127步≈38s\nMW辅助仅需10步≈3s (13×加速)',
+    metrics:{snr:'7.3',tput:'0',delay:'—',ber:'12'},
+    linkMW:'off',linkLaser:'off',linkMCCF:'off',linkTSH:'off',
+    statusText:'互质盲扫演示中...',
+    chips:{fibo:true,scan:true,mw:false,laser:false},
+    isDemo:true,
+  },
+  { // 6: fault - pointing error
+    name:'激光指向误差突变处置',
+    sub: '热变形→指向误差>15μrad→CFAR丢帧SNR<7.5dB→PAT精扫螺旋重捕→误差收敛→稳态恢复',
+    dur: 22000, smActive:[2,3], smDone:[0,1],
+    algo_title:'PAT 精扫重捕获流程',
+    algo_formula:'误差检测: ΔSNR<−5dB/s\n触发精扫: 螺旋Δφ=±50μrad\n重捕门限: SNR>11dB\n收敛速度: <200ms\nFEC+PN码辅助同步',
+    algo_note:'压电驱动微扫描消除系统误差\n重捕过程MW保持控制链路\n重捕失败→降级MW保底→重建',
+    metrics:{snr:'8.1',tput:'0',delay:'20',ber:'45'},
+    linkMW:'on',linkLaser:'off',linkMCCF:'on',linkTSH:'on',
+    statusText:'激光重捕获中...',
+    chips:{fibo:false,scan:true,mw:true,laser:false},
+    isFault:true,
+  },
+  { // 7: fault - deadlock
+    name:'空间死锁场景对比演示',
+    sub: '传统gcd(4,4)=4→仅遍历N/4格点→周期死锁  vs  互质gcd(7,13)=1→遍历全部N格点→必然碰撞',
+    dur: 25000, smActive:[2], smDone:[0,1],
+    algo_title:'死锁成因与互质破解',
+    algo_formula:'死锁条件: gcd(ΔsA,ΔsB)>1\n示例: gcd(4,4)=4→仅遍历N/4点\n→同相位→永远碰不到\n互质: gcd(7,13)=1\n→遍历全N点→碰撞率=100%',
+    algo_note:'传统方案空间死锁概率≈1.9%\n互质方案死锁概率=0%\n蒙特卡洛N=10000次实验验证',
+    metrics:{snr:'-36.7',tput:'0',delay:'—',ber:'0'},
+    linkMW:'scan',linkLaser:'off',linkMCCF:'off',linkTSH:'off',
+    statusText:'死锁对比演示...',
+    chips:{fibo:true,scan:true,mw:false,laser:false},
+    isFault:true,
+  },
+  { // 8: fault - QoS
+    name:'双链路拥塞QoS弃车保帅',
+    sub: '激光+微波同时拥塞→TSH优先队列→丢弃低优先流量→保障λH=80Mbps高优先业务不中断',
+    dur: 20000, smActive:[0,1,4], smDone:[0,1,2,3],
+    algo_title:'"弃车保帅" QoS策略',
+    algo_formula:'TSH TrafficClass(3bit):\n111=最高优 λH=80Mbps\n010=中优  C_MW=150Mbps上限\n001=低优  拥塞时首先丢弃\n零拷贝指针分发无复制开销',
+    algo_note:'控制面MCCF帧始终最高优先\n数据面按TC字段动态调度\n恢复后全速1Gbps重建\n端到端时延<12ms',
+    metrics:{snr:'24.5',tput:'80',delay:'35',ber:'100'},
+    linkMW:'on',linkLaser:'off',linkMCCF:'on',linkTSH:'on',
+    statusText:'QoS降级保障中...',
+    chips:{fibo:false,scan:false,mw:true,laser:false},
+    isFault:true,
+  },
+];
+
+// ═══════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════
+let currentPhase = 0;
+let phaseElapsed  = 0;
+let autoPlay      = false;
+let simSpeed      = 2;
+let lastTs        = null;
+let simTimeSec    = 0;
+let chartTick     = 0;
+
+// Assisted scan state (phase 2) — MW provides start hint
+const DS_A = 7, DS_B = 13;
+const I0_ASSISTED_A = 100;
+const I0_ASSISTED_B = 40;
+const captureStepAssisted = 10;  // verified: m=10 → iA=iB=170
+let scanStepAssisted = 0;
+let captureFoundAssisted = false;
+
+// Blind scan state (phase 5, 7) — random start, full search
+let I0_A = Math.floor(Math.random()*N_FIBO);
+let I0_B = Math.floor(Math.random()*N_FIBO);
+let scanStep     = 0;
+let captureFound = false;
+let captureStep  = -1;
+
+function recomputeBlindScan(){
+  I0_A = Math.floor(Math.random()*N_FIBO);
+  I0_B = Math.floor(Math.random()*N_FIBO);
+  captureStep = -1;
+  for(let m=0;m<N_FIBO*N_FIBO;m++){
+    const ia=(I0_A+m*DS_A)%N_FIBO;
+    const ib=(I0_B+m*DS_B)%N_FIBO;
+    if(ia===ib){captureStep=m;break;}
+  }
+}
+recomputeBlindScan();
+
+// Three.js refs
+let scene, camera, renderer;
+let earthMesh;
+let satMeshes   = [];
+let fiboObjs    = [];
+let scanCursors = [];
+let faceArrows  = [];
+let beamCones   = [];
+let mwLine, laserLine, laserBeamCyl, trackBeam, losLine;
+let mwPackets   = [];   // 4 small spheres for MW packet animation
+let mwBroadcast = [];   // 2 expanding wireframe spheres
+
+let snrHistory=[], tputHistory=[], timeHistory=[];
+const MAX_HIST = 200;
+
+const orbitState = {theta:0.55, phi:0.82, r:8.5};
+
+// ═══════════════════════════════════════════════════════════════════
+// THREE.JS INIT
+// ═══════════════════════════════════════════════════════════════════
+function initThree(){
+  const canvas = document.getElementById('canvas3d');
+  const cont   = document.getElementById('mid');
+  renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setClearColor(0x02040f);
+  renderer.setSize(cont.clientWidth, cont.clientHeight);
+
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(45, cont.clientWidth/cont.clientHeight, 0.01, 800);
+  updateCamPos();
+
+  scene.add(new THREE.AmbientLight(0x102040, 1.6));
+  const sun=new THREE.DirectionalLight(0xffffff,2.2);
+  sun.position.set(10,6,8); scene.add(sun);
+  const fill=new THREE.DirectionalLight(0x1a3070,0.6);
+  fill.position.set(-5,-3,-5); scene.add(fill);
+
+  // Stars
+  const sp=new Float32Array(2500*3);
+  for(let i=0;i<2500;i++){
+    const r=350+Math.random()*180,th=Math.random()*Math.PI*2,ph=Math.acos(2*Math.random()-1);
+    sp[i*3]=r*Math.sin(ph)*Math.cos(th);sp[i*3+1]=r*Math.sin(ph)*Math.sin(th);sp[i*3+2]=r*Math.cos(ph);
+  }
+  const sg=new THREE.BufferGeometry();sg.setAttribute('position',new THREE.BufferAttribute(sp,3));
+  scene.add(new THREE.Points(sg,new THREE.PointsMaterial({color:0xffffff,size:0.7,sizeAttenuation:true,transparent:true,opacity:0.6})));
+
+  // Earth
+  const eg=new THREE.SphereGeometry(R_E3D,64,64);
+  const em=new THREE.MeshPhongMaterial({color:0x0d2356,emissive:0x041020,specular:0x224488,shininess:20});
+  earthMesh=new THREE.Mesh(eg,em);scene.add(earthMesh);
+  const wg=new THREE.SphereGeometry(R_E3D*1.001,24,16);
+  scene.add(new THREE.Mesh(wg,new THREE.MeshBasicMaterial({color:0x0a2050,wireframe:true,transparent:true,opacity:0.28})));
+  const ag=new THREE.SphereGeometry(R_E3D*1.038,32,32);
+  scene.add(new THREE.Mesh(ag,new THREE.MeshPhongMaterial({color:0x0044ff,transparent:true,opacity:0.055,side:THREE.BackSide,emissive:0x002288})));
+
+  // Equatorial ring
+  const rpts=[];
+  for(let k=0;k<=128;k++) rpts.push(new THREE.Vector3(R_E3D*1.01*Math.cos(k/128*Math.PI*2),0,R_E3D*1.01*Math.sin(k/128*Math.PI*2)));
+  const rg=new THREE.BufferGeometry().setFromPoints(rpts);
+  scene.add(new THREE.Line(rg,new THREE.LineBasicMaterial({color:0x0f2060,transparent:true,opacity:0.5})));
+
+  // Orbit paths
+  for(let si=0;si<2;si++){
+    const pts=[];
+    for(let k=0;k<=256;k++) pts.push(getSatPos(si,(k/256)*T_ORB));
+    const gl=new THREE.BufferGeometry().setFromPoints(pts);
+    scene.add(new THREE.Line(gl,new THREE.LineBasicMaterial({color:si===0?0x443300:0x003344,transparent:true,opacity:0.5})));
+  }
+
+  // Satellites + children
+  satMeshes=[]; fiboObjs=[]; scanCursors=[]; faceArrows=[[],[]];
+  for(let si=0;si<2;si++){
+    const sg=new THREE.OctahedronGeometry(0.065,0);
+    const sm=new THREE.MeshPhongMaterial({color:SATS[si].color,emissive:SATS[si].color,emissiveIntensity:0.55,shininess:90});
+    const sat=new THREE.Mesh(sg,sm);
+    scene.add(sat);
+    satMeshes.push(sat);
+
+    // Solar panels
+    for(let s=-1;s<=1;s+=2){
+      const pg=new THREE.BoxGeometry(0.22,0.03,0.08);
+      const pm=new THREE.MeshPhongMaterial({color:0x113366,emissive:0x0a2244});
+      const pn=new THREE.Mesh(pg,pm);pn.position.x=s*0.17;sat.add(pn);
+    }
+
+    // Fibonacci sphere
+    const fpos=new Float32Array(N_FIBO*3);
+    const fcol=new Float32Array(N_FIBO*3);
+    for(let i=0;i<N_FIBO;i++){
+      fpos[i*3]=fiboLocalPts[i].x;fpos[i*3+1]=fiboLocalPts[i].y;fpos[i*3+2]=fiboLocalPts[i].z;
+      const hex=FACE_COLORS[fiboFaceIdx[i]];
+      fcol[i*3]=(hex>>16&0xff)/255; fcol[i*3+1]=(hex>>8&0xff)/255; fcol[i*3+2]=(hex&0xff)/255;
+    }
+    const fgeo=new THREE.BufferGeometry();
+    fgeo.setAttribute('position',new THREE.BufferAttribute(fpos,3));
+    fgeo.setAttribute('color',new THREE.BufferAttribute(fcol,3));
+    const fmat=new THREE.PointsMaterial({size:0.016,vertexColors:true,transparent:true,opacity:0.0,sizeAttenuation:true});
+    const fpts=new THREE.Points(fgeo,fmat);
+    sat.add(fpts);
+    fiboObjs.push(fpts);
+
+    // Scan cursor — larger (0.035 radius) with glow
+    const ccg=new THREE.SphereGeometry(0.035,12,12);
+    const ccm=new THREE.MeshBasicMaterial({color:si===0?0xffd700:0x00e5ff,transparent:true,opacity:0});
+    const cc=new THREE.Mesh(ccg,ccm);
+    sat.add(cc);
+    scanCursors.push(cc);
+
+    // Face arrows (4 per satellite) — transparent materials for opacity control
+    for(let fi=0;fi<4;fi++){
+      const arr=new THREE.ArrowHelper(
+        FACE_NORMALS[fi].clone(),
+        new THREE.Vector3(0,0,0),
+        0.28, FACE_COLORS[fi], 0.07, 0.05
+      );
+      arr.line.material.transparent=true;
+      arr.cone.material.transparent=true;
+      arr.visible=false;
+      sat.add(arr);
+      faceArrows[si].push(arr);
+    }
+  }
+
+  // Beam cones (4 per satellite)
+  beamCones=[];
+  for(let si=0;si<2;si++){
+    for(let fi=0;fi<4;fi++){
+      const cg=new THREE.ConeGeometry(0.38,0.90,16,1,true);
+      const cm=new THREE.MeshBasicMaterial({color:FACE_COLORS[fi],transparent:true,opacity:0.0,side:THREE.DoubleSide,depthWrite:false});
+      const cone=new THREE.Mesh(cg,cm);
+      cone.userData={si,fi};
+      cone.visible=false;
+      scene.add(cone);
+      beamCones.push(cone);
+    }
+  }
+
+  // MW packet spheres (4 spheres travelling A↔B)
+  mwPackets=[];
+  for(let p=0;p<4;p++){
+    const pkg=new THREE.SphereGeometry(0.046,8,8);
+    const pkm=new THREE.MeshBasicMaterial({color:0x4fc3f7,transparent:true,opacity:0});
+    const pk=new THREE.Mesh(pkg,pkm);
+    pk.visible=false;
+    scene.add(pk);
+    mwPackets.push(pk);
+  }
+
+  // MW broadcast expanding spheres (1 per satellite)
+  mwBroadcast=[];
+  for(let si=0;si<2;si++){
+    const bsg=new THREE.SphereGeometry(0.12,14,10);
+    const bsm=new THREE.MeshBasicMaterial({
+      color:si===0?0xffd700:0x00e5ff,
+      wireframe:true,transparent:true,opacity:0
+    });
+    const bs=new THREE.Mesh(bsg,bsm);
+    bs.visible=false;
+    scene.add(bs);
+    mwBroadcast.push(bs);
+  }
+
+  // LOS line
+  const losGeo=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]);
+  losLine=new THREE.Line(losGeo,new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:0.0}));
+  scene.add(losLine);
+
+  // MW line
+  const mwGeo=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]);
+  mwLine=new THREE.Line(mwGeo,new THREE.LineBasicMaterial({color:0x4fc3f7,transparent:true,opacity:0.0}));
+  scene.add(mwLine);
+
+  // Laser line
+  const laGeo=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]);
+  laserLine=new THREE.Line(laGeo,new THREE.LineBasicMaterial({color:0xff3333,transparent:true,opacity:0.0}));
+  scene.add(laserLine);
+
+  // Laser beam — visible cylinder (WebGL ignores linewidth, so use mesh)
+  const lbCylGeo=new THREE.CylinderGeometry(0.007,0.007,1,10,1,false);
+  const lbCylMat=new THREE.MeshBasicMaterial({color:0xff2222,transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide});
+  laserBeamCyl=new THREE.Mesh(lbCylGeo,lbCylMat);
+  scene.add(laserBeamCyl);
+
+  // Tracking beam cone (wider for visibility)
+  const tcg=new THREE.ConeGeometry(0.034,1.0,10,1,true);
+  const tcm=new THREE.MeshBasicMaterial({color:0xff2222,transparent:true,opacity:0,side:THREE.DoubleSide,depthWrite:false});
+  trackBeam=new THREE.Mesh(tcg,tcm);
+  scene.add(trackBeam);
+
+  window.addEventListener('resize',onResize);
+  addMouseOrbit();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ORBITAL MECHANICS
+// ═══════════════════════════════════════════════════════════════════
+function getSatPos(si,t){
+  const s=SATS[si];
+  const theta=s.phase0+OMEGA*t;
+  const ci=Math.cos(s.incl),sinI=Math.sin(s.incl);
+  const cO=Math.cos(s.raan),sO=Math.sin(s.raan);
+  const ct=Math.cos(theta),st=Math.sin(theta);
+  return new THREE.Vector3(
+    R_S3D*(cO*ct-sO*ci*st),
+    R_S3D*(sinI*st),
+    R_S3D*(sO*ct+cO*ci*st),
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// UPDATE 3D SCENE
+// ═══════════════════════════════════════════════════════════════════
+function update3D(orbT){
+  const posA=getSatPos(0,orbT);
+  const posB=getSatPos(1,orbT);
+
+  satMeshes[0].position.copy(posA);
+  satMeshes[1].position.copy(posB);
+
+  const outA=posA.clone().multiplyScalar(2);
+  const outB=posB.clone().multiplyScalar(2);
+  satMeshes[0].lookAt(outA);
+  satMeshes[1].lookAt(outB);
+
+  earthMesh.rotation.y=orbT*0.000016;
+
+  const losDirW=posB.clone().sub(posA).normalize();
+  const dist_3d=posA.distanceTo(posB);
+  const dist_km=dist_3d/SCALE/1000;
+
+  setLinePoints(losLine,posA,posB);
+  // Show LOS reference line only during normal operation phases; hide during demo/fault phases
+  losLine.material.opacity=(currentPhase<=4)?0.14:0.0;
+
+  // ── Fibonacci grid ──
+  const showFibo = currentPhase===0||currentPhase===2||currentPhase===5||currentPhase===7;
+  const fiboOpac = currentPhase===0 ? 0.22 : 0.55;
+  fiboObjs[0].material.opacity = showFibo ? fiboOpac : 0.0;
+  fiboObjs[1].material.opacity = showFibo ? fiboOpac : 0.0;
+
+  // ── Face arrows — enhanced: active bright/large, inactive dim/small ──
+  const showFaceArrows = currentPhase<=2;
+  for(let si=0;si<2;si++){
+    const losLocal=losDirW.clone().applyQuaternion(satMeshes[si].quaternion.clone().invert());
+    let bestFace=0,bestDot=-Infinity;
+    FACE_NORMALS.forEach((n,fi)=>{const d=losLocal.dot(n);if(d>bestDot){bestDot=d;bestFace=fi;}});
+
+    for(let fi=0;fi<4;fi++){
+      const arr=faceArrows[si][fi];
+      arr.visible=showFaceArrows;
+      if(!showFaceArrows) continue;
+      const isActive=fi===bestFace;
+      arr.setColor(new THREE.Color(FACE_COLORS[fi]));
+      // Active: long bright; Inactive: short dim
+      arr.setLength(
+        isActive?0.42:0.18,
+        isActive?0.10:0.048,
+        isActive?0.070:0.032
+      );
+      arr.line.material.opacity = isActive?1.0:0.15;
+      arr.cone.material.opacity = isActive?1.0:0.15;
+    }
+  }
+
+  // ── Scan cursors (phases 2=assisted, 5=blind) ──
+  const showCursors = currentPhase===2||currentPhase===5;
+  for(let si=0;si<2;si++){
+    const cur=scanCursors[si];
+    if(!showCursors && currentPhase!==7){
+      cur.material.opacity=0.0;
+      cur.scale.setScalar(1.0);
+      continue;
+    }
+    if(!showCursors) continue; // phase 7 handled by applyFaultVisuals
+
+    let step,idx;
+    if(currentPhase===2){
+      step=Math.min(scanStepAssisted,captureStepAssisted);
+      idx=si===0?(I0_ASSISTED_A+step*DS_A)%N_FIBO:(I0_ASSISTED_B+step*DS_B)%N_FIBO;
+      if(captureFoundAssisted){
+        cur.material.color.set(0x39ff14);
+        cur.material.opacity=0.95+0.05*Math.sin(simTimeSec*8);
+        cur.scale.setScalar(1.6+0.35*Math.sin(simTimeSec*6));
+      } else {
+        const stepsLeft=captureStepAssisted-step;
+        const nearCapture=stepsLeft<=3;
+        cur.material.color.set(si===0?0xffd700:0x00e5ff);
+        cur.material.opacity=nearCapture?0.95+0.05*Math.sin(simTimeSec*14):0.88;
+        // Warning pulse when within 3 steps of capture
+        cur.scale.setScalar(nearCapture?1.0+0.45*Math.abs(Math.sin(simTimeSec*10)):1.0+0.12*Math.sin(simTimeSec*12+si));
+      }
+      // Live progress in overlay subtitle (only update from SAT-A to avoid double-write)
+      if(si===0){
+        if(!captureFoundAssisted){
+          document.getElementById('overlay-sub').textContent=
+            `MW辅助精扫: 步进 ${step} / ${captureStepAssisted}步  iA=${(I0_ASSISTED_A+step*DS_A)%N_FIBO}  iB=${(I0_ASSISTED_B+step*DS_B)%N_FIBO}`;
+        } else {
+          const captureIdx=(I0_ASSISTED_A+captureStepAssisted*DS_A)%N_FIBO;
+          document.getElementById('overlay-sub').textContent=
+            `捕获成功 ✓  m=${captureStepAssisted}步 → iA=iB=${captureIdx}  SNR>11dB 稳态锁定`;
+        }
+      }
+    } else { // phase 5 blind
+      step=Math.min(scanStep,N_FIBO-1);
+      idx=si===0?(I0_A+step*DS_A)%N_FIBO:(I0_B+step*DS_B)%N_FIBO;
+      const captured=captureFound||(captureStep>0&&step>=captureStep);
+      if(captured){
+        cur.material.color.set(0x39ff14);
+        cur.material.opacity=0.95+0.05*Math.sin(simTimeSec*8);
+        cur.scale.setScalar(1.6+0.35*Math.sin(simTimeSec*6));
+      } else {
+        cur.material.color.set(si===0?0xffd700:0x00e5ff);
+        const near=captureStep>0&&Math.abs(step-captureStep)<8;
+        // Enhanced warning pulse as cursor closes in on capture point
+        const veryNear=captureStep>0&&Math.abs(step-captureStep)<3;
+        cur.material.opacity=near?0.95:0.88;
+        cur.scale.setScalar(veryNear?1.0+0.45*Math.abs(Math.sin(simTimeSec*10)):near?1.0+0.3*Math.abs(Math.sin(simTimeSec*7)):1.0);
+      }
+      // Live progress in overlay subtitle
+      if(si===0){
+        if(!captured){
+          const pct=captureStep>0?(step/captureStep*100).toFixed(0):'—';
+          document.getElementById('overlay-sub').textContent=
+            `盲扫中: ${step} 步  预计碰撞 m=${captureStep}步  进度 ${pct}%  iA=${(I0_A+step*DS_A)%N_FIBO}  iB=${(I0_B+step*DS_B)%N_FIBO}`;
+        } else {
+          document.getElementById('overlay-sub').textContent=
+            `捕获成功 ✓  m=${captureStep}步  gcd(7,13)=1 保证 100% 碰撞`;
+        }
+      }
+    }
+    cur.position.copy(fiboLocalPts[idx]);
+  }
+
+  // ── Beam cones ──
+  const showAllCones=currentPhase===2||currentPhase===5;
+  beamCones.forEach(cone=>{
+    const si=cone.userData.si,fi=cone.userData.fi;
+    const satPos=si===0?posA:posB;
+
+    if(showAllCones){
+      let step,idx;
+      if(currentPhase===2){
+        step=Math.min(scanStepAssisted,captureStepAssisted);
+        idx=si===0?(I0_ASSISTED_A+step*DS_A)%N_FIBO:(I0_ASSISTED_B+step*DS_B)%N_FIBO;
+      } else {
+        step=Math.min(scanStep,N_FIBO-1);
+        idx=si===0?(I0_A+step*DS_A)%N_FIBO:(I0_B+step*DS_B)%N_FIBO;
+      }
+      const localDir=fiboLocalPts[idx].clone().normalize();
+      const worldDir=localDir.clone().applyQuaternion(satMeshes[si].quaternion);
+      const activeCone=(fiboFaceIdx[idx]===fi);
+      cone.visible=activeCone;
+      if(!activeCone) return;
+      cone.position.copy(satPos).addScaledVector(worldDir,0.45);
+      cone.quaternion.copy(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),worldDir));
+      cone.material.opacity=0.12+0.06*Math.sin(simTimeSec*3+fi);
+    } else if(currentPhase===3||currentPhase===4){
+      const losLocal=losDirW.clone().applyQuaternion(satMeshes[si].quaternion.clone().invert());
+      let bf=0,bd=-Infinity;
+      FACE_NORMALS.forEach((n,i)=>{const d=losLocal.dot(n);if(d>bd){bd=d;bf=i;}});
+      cone.visible=(fi===bf);
+      if(!cone.visible) return;
+      const worldDir=FACE_NORMALS[fi].clone().applyQuaternion(satMeshes[si].quaternion);
+      cone.position.copy(satPos).addScaledVector(worldDir,0.45);
+      cone.quaternion.copy(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),worldDir));
+      cone.material.opacity=0.08+0.04*Math.sin(simTimeSec*2);
+    } else {
+      cone.visible=false;
+    }
+  });
+
+  // ── MW packet animation (phase 1: handshake) ──
+  if(currentPhase===1){
+    const speed=0.65;
+    for(let pi=0;pi<4;pi++){
+      const pk=mwPackets[pi];
+      pk.visible=true;
+      const tPkt=((simTimeSec*speed+pi*0.25)%1.0);
+      const fromA=pi%2===0; // even packets A→B (gold), odd packets B→A (cyan)
+      const from=fromA?posA:posB;
+      const to  =fromA?posB:posA;
+      pk.position.lerpVectors(from,to,tPkt);
+      pk.material.color.setHex(fromA?0xffd700:0x00e5ff);
+      pk.material.opacity=0.92*Math.sin(tPkt*Math.PI);
+    }
+  } else {
+    mwPackets.forEach(pk=>{pk.visible=false;});
+  }
+
+  // ── MW broadcast pulse (phase 1) ──
+  if(currentPhase===1){
+    const period=2.2;
+    for(let si=0;si<2;si++){
+      const satPos=si===0?posA:posB;
+      const bs=mwBroadcast[si];
+      bs.visible=true;
+      bs.position.copy(satPos);
+      const frac=((simTimeSec/period+si*0.5)%1.0);
+      bs.scale.setScalar(0.6+frac*5.5);
+      bs.material.opacity=(1-frac)*0.45;
+    }
+  } else {
+    mwBroadcast.forEach(bs=>{bs.visible=false;});
+  }
+
+  // ── ISL lines ──
+  setLinePoints(mwLine,posA,posB);
+  const mwSt=PHASES[currentPhase].linkMW;
+  let mwOp=0;
+  if(mwSt==='on') mwOp=0.55;
+  else if(mwSt==='scan'){
+    if(currentPhase===1) mwOp=0.18+0.35*Math.abs(Math.sin(simTimeSec*2));
+    else mwOp=0.12+0.10*Math.sin(simTimeSec*5);
+  }
+  mwLine.material.opacity=mwOp;
+
+  setLinePoints(laserLine,posA,posB);
+  const phT=phaseElapsed/(PHASES[currentPhase].dur||1);
+  let laOp=0;
+  if(currentPhase===3) laOp=0.88+0.07*Math.sin(simTimeSec*14);
+  else if(currentPhase===4){
+    if(phT<0.35) laOp=0.88+0.07*Math.sin(simTimeSec*14);
+    else if(phT<0.42) laOp=(0.42-phT)/0.07*0.88;
+    else if(phT>0.70) laOp=((phT-0.70)/0.30)*0.88;
+  }
+  laserLine.material.opacity=laOp;
+
+  // Laser beam cylinder — always update position, hide when eclipsed or opacity=0
+  // Position must be updated every frame so fault phases (6/8) that override visibility
+  // via applyFaultVisuals don't render the cylinder stuck at the phase-4 position.
+  const lbDir=posB.clone().sub(posA);
+  const lbLen=lbDir.length();
+  const lbF=posA.clone();
+  const lbD=lbDir.clone().normalize();
+  const lbDot=lbF.dot(lbD);
+  const eclipsed=(lbF.dot(lbF)-lbDot*lbDot)<(R_E3D*R_E3D*1.04);
+  laserBeamCyl.position.copy(posA.clone().lerp(posB,0.5));
+  laserBeamCyl.quaternion.copy(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),lbDir.normalize()));
+  laserBeamCyl.scale.y=lbLen;
+  laserBeamCyl.material.opacity=laOp;
+  laserBeamCyl.visible=laOp>0.01&&!eclipsed;
+
+  // ── Tracking beam ──
+  const showTrack=currentPhase===3||currentPhase===4||currentPhase===6;
+  trackBeam.visible=showTrack;
+  if(showTrack){
+    const dir=posB.clone().sub(posA).normalize();
+    const len=posA.distanceTo(posB);
+    trackBeam.position.copy(posA.clone().lerp(posB,0.5));
+    trackBeam.quaternion.copy(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),dir));
+    trackBeam.scale.y=len*0.42;
+    trackBeam.material.color.set(currentPhase>=3?0xff2222:0x00aaff);
+    trackBeam.material.opacity=0.40+0.12*Math.sin(simTimeSec*9);
+  }
+
+  updateSatLabel('lbl-a',posA);
+  updateSatLabel('lbl-b',posB);
+  applyFaultVisuals(posA,posB);
+  updatePointingPanel(posA,posB,dist_km,losDirW);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FAULT VISUALS
+// ═══════════════════════════════════════════════════════════════════
+let faultJitter=0;
+
+function applyFaultVisuals(posA,posB){
+  const phT=phaseElapsed/(PHASES[currentPhase]?.dur||1);
+
+  // Phase 6: Pointing error → jitter on trackBeam
+  if(currentPhase===6){
+    const errorPhase=phT<0.40;
+    const convergingPhase=phT>=0.40&&phT<0.68;
+    const recoveredPhase=phT>=0.68;
+    if(errorPhase) faultJitter=Math.min(0.28,phT/0.40*0.28);
+    else if(convergingPhase) faultJitter=0.28*(1-(phT-0.40)/0.28);
+    else faultJitter=0;
+
+    if(trackBeam&&trackBeam.visible){
+      const jx=Math.sin(simTimeSec*8.3)*faultJitter;
+      const jy=Math.cos(simTimeSec*6.1)*faultJitter*0.7;
+      const jz=Math.sin(simTimeSec*11.7)*faultJitter*0.5;
+      const dir=posB.clone().sub(posA).normalize();
+      const jDir=dir.clone().add(new THREE.Vector3(jx,jy,jz)).normalize();
+      const len=posA.distanceTo(posB);
+      trackBeam.position.copy(posA.clone().lerp(posB,0.5));
+      trackBeam.quaternion.copy(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),jDir));
+      trackBeam.scale.y=len*0.42;
+      trackBeam.material.color.set(errorPhase?0xff4400:convergingPhase?0xffaa00:0xff2222);
+      trackBeam.material.opacity=0.45+0.15*Math.sin(simTimeSec*(errorPhase?18:9));
+    }
+    if(errorPhase) laserLine.material.opacity=Math.max(0,0.6*Math.sin(simTimeSec*22)+0.1);
+    else if(recoveredPhase) laserLine.material.opacity=0.88;
+    // Sync laser cylinder
+    laserBeamCyl.material.opacity=laserLine.material.opacity;
+    laserBeamCyl.visible=laserLine.material.opacity>0.01;
+
+    const errmsg=errorPhase?`指向误差: ${(faultJitter/DEG*1e6/300).toFixed(0)} μrad  ▶ 触发重捕`:
+                 convergingPhase?`误差收敛中: ${(faultJitter/DEG*1e6/300).toFixed(1)} μrad → 0`:
+                 '误差收敛完成 ✓ 激光重建稳态';
+    document.getElementById('overlay-sub').textContent=errmsg;
+    return;
+  }
+
+  // Phase 7: Deadlock comparison — cursors shown here
+  if(currentPhase===7){
+    // Make fibo cursors visible
+    for(let si=0;si<2;si++){
+      scanCursors[si].material.opacity=0.9;
+      scanCursors[si].scale.setScalar(1.0+0.2*Math.sin(simTimeSec*5+si));
+    }
+    const m=Math.min(scanStep,N_FIBO-1);
+    const DS_TRAD=4;
+    const I0_TRAD_A=0,I0_TRAD_B=1;
+    const ia_trad=(I0_TRAD_A+m*DS_TRAD)%N_FIBO;
+    const ib_trad=(I0_TRAD_B+m*DS_TRAD)%N_FIBO;
+    const showTraditional=phT<0.55;
+    scanCursors[0].material.color.set(showTraditional?0xff3333:0xffd700);
+    scanCursors[1].material.color.set(showTraditional?0xff6600:0x00e5ff);
+
+    if(showTraditional){
+      scanCursors[0].position.copy(fiboLocalPts[ia_trad]);
+      scanCursors[1].position.copy(fiboLocalPts[ib_trad]);
+      const sameIdx=ia_trad===ib_trad;
+      if(m===0){
+        // First frame: no steps taken yet — show intro message
+        document.getElementById('overlay-sub').textContent=
+          '传统方案 gcd(4,4)=4 → 仅遍历 N/4 个格点 → 开始演示死锁...';
+      } else {
+        document.getElementById('overlay-sub').textContent=sameIdx?
+          '传统方案: 偶然碰撞（非保证）→ 存在死锁风险':
+          `传统 gcd(4,4)=4 ▶ iA=${ia_trad} iB=${ib_trad} 差=${Math.abs(ia_trad-ib_trad)} ≠ 0 → 死锁`;
+      }
+      scanCursors[0].scale.setScalar(1.0+0.5*Math.sin(simTimeSec*6));
+    } else {
+      // 互质演示用固定参数保证m=10步必然捕获（iA₀=100,iB₀=40）
+      const coprimeM = Math.max(0, scanStep - Math.floor(0.55*PHASES[7].dur/150));
+      const ia_cp=(I0_ASSISTED_A+coprimeM*DS_A)%N_FIBO;
+      const ib_cp=(I0_ASSISTED_B+coprimeM*DS_B)%N_FIBO;
+      scanCursors[0].position.copy(fiboLocalPts[ia_cp]);
+      scanCursors[1].position.copy(fiboLocalPts[ib_cp]);
+      const coprimeCaptured = coprimeM >= captureStepAssisted;
+      if(coprimeCaptured){
+        scanCursors[0].material.color.set(0x39ff14);
+        scanCursors[1].material.color.set(0x39ff14);
+        scanCursors[0].scale.setScalar(1.8+0.4*Math.sin(simTimeSec*10));
+        scanCursors[1].scale.setScalar(1.8+0.4*Math.sin(simTimeSec*10));
+        document.getElementById('overlay-sub').textContent=`互质 gcd(7,13)=1 ▶ 碰撞捕获 m=${captureStepAssisted} ✓  100% 保证`;
+        // Flash once on capture
+        if(coprimeM===captureStepAssisted && !captureFound){
+          captureFound=true;
+          triggerCaptureFlash();
+        }
+      } else {
+        document.getElementById('overlay-sub').textContent=
+          `互质 gcd(7,13)=1 ▶ iA=${ia_cp} iB=${ib_cp}  剩余~${captureStepAssisted-coprimeM}步必然碰撞`;
+      }
+    }
+    return;
+  }
+
+  // Phase 8: QoS congestion
+  if(currentPhase===8){
+    const congestionPhase=phT<0.45;
+    const qosPhase=phT>=0.45&&phT<0.75;
+    const recoveryPhase=phT>=0.75;
+    mwLine.material.opacity=congestionPhase?0.3+0.3*Math.abs(Math.sin(simTimeSec*7)):
+                             qosPhase?0.55+0.1*Math.sin(simTimeSec*3):0.85;
+    laserLine.material.opacity=recoveryPhase?((phT-0.75)/0.25)*0.85:0;
+    laserBeamCyl.material.opacity=laserLine.material.opacity;
+    laserBeamCyl.visible=laserLine.material.opacity>0.01;
+    const msg=congestionPhase?'双链路拥塞检测 → 启动QoS优先队列':
+               qosPhase?'λH=80Mbps 高优先保障中  低优先流量已丢弃':
+               '拥塞消除 → 激光重建 → 1Gbps全速恢复';
+    document.getElementById('overlay-sub').textContent=msg;
+    return;
+  }
+}
+
+function setLinePoints(line,pA,pB){
+  line.geometry.setFromPoints([pA,pB]);
+  line.geometry.attributes.position.needsUpdate=true;
+}
+
+function updateSatLabel(id,wp){
+  const el=document.getElementById(id);
+  const cont=document.getElementById('mid');
+  const v=wp.clone().project(camera);
+  if(v.z>1){el.style.display='none';return;}
+  el.style.display='block';
+  el.style.left=((v.x+1)/2*cont.clientWidth+10)+'px';
+  el.style.top =((-v.y+1)/2*cont.clientHeight-20)+'px';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// POINTING PANEL
+// ═══════════════════════════════════════════════════════════════════
+function updatePointingPanel(posA,posB,dist_km,losDirW){
+  const dx=((posB.x-posA.x)/SCALE/1000).toFixed(0);
+  const dy=((posB.y-posA.y)/SCALE/1000).toFixed(0);
+  const dz=((posB.z-posA.z)/SCALE/1000).toFixed(0);
+  document.getElementById('pt-dp-x').textContent=dx;
+  document.getElementById('pt-dp-y').textContent=dy;
+  document.getElementById('pt-dp-z').textContent=dz;
+  document.getElementById('pt-dist').textContent=dist_km.toFixed(1)+' km';
+
+  const losLocal=losDirW.clone().applyQuaternion(satMeshes[0].quaternion.clone().invert());
+  const az=(Math.atan2(losLocal.x,losLocal.z)/DEG).toFixed(1);
+  const el=(Math.asin(Math.max(-1,Math.min(1,losLocal.y)))/DEG).toFixed(1);
+  document.getElementById('pt-az').textContent=az+'°';
+  document.getElementById('pt-el').textContent=el+'°';
+
+  let bestFace=0,bestDot=-Infinity,bestOffAxis=0;
+  FACE_NORMALS.forEach((n,fi)=>{
+    const d=losLocal.dot(n);
+    if(d>bestDot){bestDot=d;bestFace=fi;bestOffAxis=Math.acos(Math.max(-1,Math.min(1,d)))/DEG;}
+  });
+  document.getElementById('pt-face').textContent=FACE_SHORT[bestFace];
+  document.getElementById('pt-fnorm').textContent=FACE_NAMES[bestFace];
+  const oa=bestOffAxis.toFixed(1);
+  const oaEl=document.getElementById('pt-offaxis');
+  oaEl.textContent=oa+'°';
+  oaEl.className='pt-val '+(bestOffAxis<54.74?'ok':'warn');
+
+  // Scan state display
+  if(currentPhase===2){ // assisted scan
+    const m=Math.min(scanStepAssisted,captureStepAssisted);
+    const ia=(I0_ASSISTED_A+m*DS_A)%N_FIBO;
+    const ib=(I0_ASSISTED_B+m*DS_B)%N_FIBO;
+    document.getElementById('pt-ia').textContent=ia+' / '+N_FIBO;
+    document.getElementById('pt-ib').textContent=ib+' / '+N_FIBO;
+    document.getElementById('pt-step').textContent=m+' | 1';
+    const colEl=document.getElementById('pt-collision');
+    if(captureFoundAssisted){
+      colEl.textContent='✓ 辅助精扫捕获 m='+captureStepAssisted;
+      colEl.style.color='var(--green)';
+    } else {
+      colEl.textContent='精扫中... 剩余~'+(captureStepAssisted-m)+'步';
+      colEl.style.color='var(--orange)';
+    }
+  } else if(currentPhase===5){ // blind scan demo
+    const m=Math.min(scanStep,N_FIBO-1);
+    const ia=(I0_A+m*DS_A)%N_FIBO;
+    const ib=(I0_B+m*DS_B)%N_FIBO;
+    document.getElementById('pt-ia').textContent=ia+' / '+N_FIBO;
+    document.getElementById('pt-ib').textContent=ib+' / '+N_FIBO;
+    document.getElementById('pt-step').textContent=m+' | 1';
+    const colEl=document.getElementById('pt-collision');
+    if(captureFound||m>=captureStep&&captureStep>0){
+      colEl.textContent='✓ 碰撞捕获 m='+captureStep;
+      colEl.style.color='var(--green)';
+    } else {
+      const remain=captureStep>0?captureStep-m:'?';
+      colEl.textContent='盲扫中... 剩余~'+remain+'步';
+      colEl.style.color='var(--orange)';
+    }
+  } else if(currentPhase>=3&&currentPhase<=4){
+    document.getElementById('pt-ia').textContent='锁定';
+    document.getElementById('pt-ib').textContent='锁定';
+    document.getElementById('pt-step').textContent=captureStepAssisted+' | 1';
+    const colEl=document.getElementById('pt-collision');
+    colEl.textContent='✓ 已捕获 (辅助精扫)';
+    colEl.style.color='var(--green)';
+  } else {
+    document.getElementById('pt-ia').textContent='— / '+N_FIBO;
+    document.getElementById('pt-ib').textContent='— / '+N_FIBO;
+    document.getElementById('pt-step').textContent='— | 1';
+    document.getElementById('pt-collision').textContent='等待触发';
+    document.getElementById('pt-collision').style.color='var(--text3)';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ORBIT CAMERA
+// ═══════════════════════════════════════════════════════════════════
+function updateCamPos(){
+  camera.position.set(
+    orbitState.r*Math.sin(orbitState.phi)*Math.sin(orbitState.theta),
+    orbitState.r*Math.cos(orbitState.phi),
+    orbitState.r*Math.sin(orbitState.phi)*Math.cos(orbitState.theta),
+  );
+  camera.lookAt(0,0,0);
+}
+function addMouseOrbit(){
+  const cv=document.getElementById('canvas3d');
+  let drag=false,lx=0,ly=0;
+  cv.addEventListener('mousedown',e=>{drag=true;lx=e.clientX;ly=e.clientY;});
+  window.addEventListener('mouseup',()=>drag=false);
+  window.addEventListener('mousemove',e=>{
+    if(!drag)return;
+    orbitState.theta-=(e.clientX-lx)*0.007;
+    orbitState.phi  -=(e.clientY-ly)*0.007;
+    orbitState.phi=Math.max(0.08,Math.min(Math.PI-0.08,orbitState.phi));
+    lx=e.clientX;ly=e.clientY;updateCamPos();
+  });
+  cv.addEventListener('wheel',e=>{
+    orbitState.r=Math.max(4,Math.min(22,orbitState.r+e.deltaY*0.013));
+    updateCamPos();e.preventDefault();
+  },{passive:false});
+}
+function onResize(){
+  const cont=document.getElementById('mid');
+  const W=cont.clientWidth,H=cont.clientHeight;
+  camera.aspect=W/H;camera.updateProjectionMatrix();renderer.setSize(W,H);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CAPTURE FLASH — triple green flash
+// ═══════════════════════════════════════════════════════════════════
+function triggerCaptureFlash(){
+  const el=document.getElementById('cap-flash');
+  let flashes=0;
+  const doFlash=()=>{
+    if(flashes>=6){el.style.opacity='0';return;}
+    el.style.opacity=flashes%2===0?'1':'0';
+    flashes++;
+    setTimeout(doFlash,200);
+  };
+  doFlash();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PHASE MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════
+function setPhase(p){
+  currentPhase=p;
+  phaseElapsed=0;
+  captureFound=false;
+  captureFoundAssisted=false;
+  faultJitter=0;
+  if(p===2) scanStepAssisted=0;
+  if(p===5||p===7) scanStep=0;
+
+  const ph=PHASES[p];
+  const totalSteps=PHASES.length;
+  for(let i=0;i<totalSteps;i++){
+    const el=document.getElementById('step-'+i);
+    if(!el) continue;
+    const st=document.getElementById('st-'+i);
+    el.classList.remove('active','done');
+    if(i<p){el.classList.add('done');st.textContent='已完成 ✓';}
+    else if(i===p){el.classList.add('active');st.textContent=ph.statusText;}
+    else st.textContent='等待触发';
+  }
+
+  for(let i=0;i<6;i++) document.getElementById('sm-'+i).classList.remove('active','done');
+  (ph.smDone||[]).forEach(i=>document.getElementById('sm-'+i).classList.add('done'));
+  (ph.smActive||[]).forEach(i=>document.getElementById('sm-'+i).classList.add('active'));
+
+  document.getElementById('overlay-title').textContent=ph.name;
+  document.getElementById('overlay-sub').textContent=ph.sub;
+  document.getElementById('algo-title').textContent=ph.algo_title;
+  document.getElementById('algo-formula').innerHTML=ph.algo_formula.replace(/\n/g,'<br>');
+  document.getElementById('algo-note').innerHTML=ph.algo_note.replace(/\n/g,'<br>');
+
+  updateMetrics(ph.metrics);
+  setLinkStatus('lk-mw',ph.linkMW);
+  setLinkStatus('lk-laser',ph.linkLaser);
+  setLinkStatus('lk-mccf',ph.linkMCCF);
+  setLinkStatus('lk-tsh',ph.linkTSH);
+
+  const chips=ph.chips||{};
+  setChip('chip-fibo',chips.fibo);
+  setChip('chip-scan',chips.scan);
+  setChip('chip-mw',chips.mw);
+  setChip('chip-laser',chips.laser);
+
+  // Update chip-scan label based on phase
+  const scanLabel=p===2?'MW辅助精扫':p===5?'互质盲扫':'扫描中';
+  document.getElementById('chip-scan').textContent=scanLabel;
+
+  // Phase display
+  let displayText;
+  if(p>=6) displayText='故障 '+(p-5);
+  else if(p===5) displayText='算法演示';
+  else displayText='阶段 '+(p+1);
+  document.getElementById('phase-display').textContent=displayText+' / '+PHASES.length;
+  document.getElementById('sys-status').textContent=ph.statusText;
+  document.getElementById('phase-progress').style.width='0%';
+
+  // Clear chart history so each phase shows a fresh trace
+  snrHistory=[];tputHistory=[];timeHistory=[];
+  if(typeof Plotly!=='undefined') initCharts();
+}
+
+function setChip(id,active){
+  const el=document.getElementById(id);
+  el.classList.toggle('active',!!active);
+  el.classList.toggle('inactive',!active);
+}
+function setLinkStatus(id,st){
+  const el=document.getElementById(id);
+  el.className='link-val';
+  if(st==='on'){el.classList.add('on');el.textContent='● 在线';}
+  else if(st==='scan'){el.classList.add('scan');el.textContent='◎ 扫描中';}
+  else{el.classList.add('off');el.textContent='○ 未建立';}
+}
+function updateMetrics(m){
+  const set=(id,val,unit,cls)=>{
+    document.getElementById('mc-'+id).className='metric-card'+(cls?' '+cls:'');
+    document.getElementById('mv-'+id).innerHTML=val+'<span class="metric-unit">'+unit+'</span>';
+  };
+  const snr=parseFloat(m.snr);
+  set('snr',m.snr,' dB',snr>11?'good':snr>0?'warn':'');
+  const tp=parseFloat(m.tput);
+  set('tput',m.tput,' Mbps',tp>=900?'good':tp>0?'warn':'');
+  set('delay',m.delay,' ms','');
+  const ber=parseFloat(m.ber);
+  set('ber',m.ber,' %',ber>=100?'good':ber>50?'warn':'');
+}
+
+function prevPhase(){if(currentPhase>0) setPhase(currentPhase-1);}
+function nextPhase(){if(currentPhase<PHASES.length-1) setPhase(currentPhase+1);}
+function jumpPhase(p){setPhase(p);}
+function toggleAuto(){
+  autoPlay=!autoPlay;
+  const btn=document.getElementById('auto-btn');
+  btn.className=autoPlay?'ctrl-btn active':'ctrl-btn primary';
+  btn.textContent=autoPlay?'⏸ 暂停演示':'▶ 自动演示';
+}
+function resetDemo(){
+  autoPlay=false;
+  const btn=document.getElementById('auto-btn');
+  btn.className='ctrl-btn primary';btn.textContent='▶ 自动演示';
+
+  // Randomize orbital phase — both satellites shift by the same random offset
+  // so relative geometry is preserved but LOS direction changes → different active face
+  const offset = Math.random() * Math.PI * 2;
+  SATS[0].phase0 = offset;
+  SATS[1].phase0 = offset + Math.PI * 0.6;
+
+  // Randomize blind scan start points
+  recomputeBlindScan();
+
+  // Explicitly reset scan and fault state so stale values don't leak into a fresh run
+  scanStepAssisted=0;
+  scanStep=0;
+  faultJitter=0;
+
+  simTimeSec=0;
+  setPhase(0); // setPhase already clears chart history and calls initCharts()
+}
+function setSpeed(s){
+  simSpeed=s;
+  document.querySelectorAll('.speed-btn').forEach(b=>b.classList.remove('sel'));
+  const btns=document.querySelectorAll('.speed-btn');
+  [1,2,4].forEach((v,i)=>{if(v===s)btns[i].classList.add('sel');});
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SIMULATION DATA
+// ═══════════════════════════════════════════════════════════════════
+function simSNR(phase,elapsed,dur){
+  const t=elapsed/dur;
+  if(phase===0) return -36.7+(Math.random()-0.5)*0.4;
+  if(phase===1){ // MW grows quickly from noise
+    const prog=Math.min(1,t*3.5);
+    return -36.7+(24.5+36.7)*Math.pow(prog,0.6)+(Math.random()-0.5)*1.5;
+  }
+  if(phase===2){ // assisted scan — brief CFAR region then capture
+    if(captureFoundAssisted) return 42.1+(Math.random()-0.5)*0.7;
+    return 7.3+(Math.random()-0.5)*2.0;
+  }
+  if(phase===3) return 42.1+(Math.random()-0.5)*0.7;
+  if(phase===4){
+    if(t<0.35) return 42.1+(Math.random()-0.5)*0.7;
+    if(t<0.42) return 42.1-(t-0.35)/0.07*17.6+(Math.random()-0.5)*1;
+    if(t<0.70) return 24.5+(Math.random()-0.5)*1.2;
+    return 24.5+((t-0.70)/0.30)*17.6+(Math.random()-0.5)*0.7;
+  }
+  if(phase===5){ // blind scan — slowly rises to 7.3 dB baseline, jumps to 42 dB on capture
+    const prog=captureFound?1:Math.pow(Math.min(t,1.0),2.5);
+    return -36.7+(7.3+36.7)*prog+(Math.random()-0.5)*2.5;
+  }
+  if(phase===6){ // pointing error
+    if(t<0.40) return 42.1-(t/0.40)*34+(Math.random()-0.5)*2;
+    if(t<0.68) return 8.0+(t-0.40)/0.28*34+(Math.random()-0.5)*1.5;
+    return 42.1+(Math.random()-0.5)*0.7;
+  }
+  if(phase===7){ // deadlock
+    if(t<0.55) return -36.7+5*Math.abs(Math.sin(simTimeSec*0.8))+(Math.random()-0.5)*1.5;
+    const prog=Math.min(1,(t-0.55)/0.25);
+    return -36.7+(7.3+36.7)*Math.pow(prog,1.5)+(Math.random()-0.5)*2;
+  }
+  if(phase===8){ // QoS
+    if(t<0.45) return 22+(Math.random()-0.5)*4;
+    if(t<0.75) return 24.5+(Math.random()-0.5)*1;
+    return 24.5+((t-0.75)/0.25)*17.6+(Math.random()-0.5)*0.7;
+  }
+  return -36.7;
+}
+
+function simTput(phase,elapsed,dur){
+  const t=elapsed/dur;
+  if(phase===0) return 0;
+  if(phase===1) return 90+(Math.random()-0.5)*12;
+  if(phase===2) return captureFoundAssisted?990+(Math.random()-0.5)*12:0;
+  if(phase===3) return 990+(Math.random()-0.5)*12;
+  if(phase===4){
+    if(t<0.35) return 990+(Math.random()-0.5)*12;
+    if(t<0.42) return 990*(1-(t-0.35)/0.07)+(Math.random()-0.5)*10;
+    if(t<0.70) return 148+(Math.random()-0.5)*7;
+    return 148+((t-0.70)/0.30)*842+(Math.random()-0.5)*10;
+  }
+  if(phase===5) return 0;
+  if(phase===6){
+    if(t<0.40) return 990*(1-t/0.40)+(Math.random()-0.5)*10;
+    if(t<0.68) return (t-0.40)/0.28*990+(Math.random()-0.5)*15;
+    return 990+(Math.random()-0.5)*12;
+  }
+  if(phase===7) return t>0.55?Math.min(150,(t-0.55)/0.25*100+(Math.random()-0.5)*8):0;
+  if(phase===8){
+    if(t<0.45) return 80+(Math.random()-0.5)*15;
+    if(t<0.75) return 80+(Math.random()-0.5)*8;
+    return 80+((t-0.75)/0.25)*910+(Math.random()-0.5)*12;
+  }
+  return 0;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CHARTS
+// ═══════════════════════════════════════════════════════════════════
+const BL={
+  paper_bgcolor:'#05091a',plot_bgcolor:'#02040f',
+  font:{color:'#6888b0',family:'Share Tech Mono',size:8},
+  margin:{l:44,r:8,t:26,b:32},
+  xaxis:{color:'#3a5080',gridcolor:'#0f1e45',zerolinecolor:'#0f1e45',tickfont:{size:7}},
+  yaxis:{color:'#3a5080',gridcolor:'#0f1e45',zerolinecolor:'#0f1e45',tickfont:{size:7}},
+  showlegend:false,
+};
+function initCharts(){
+  Plotly.newPlot('chart-snr',[
+    {x:[],y:[],type:'scatter',mode:'lines',line:{color:'#00e5ff',width:1.5},name:'SNR'},
+  ],{
+    ...BL,
+    title:{text:'信噪比 SNR (dB)',font:{size:10,color:'#6888b0',family:'Noto Sans SC'}},
+    xaxis:{...BL.xaxis,title:{text:'时间(s)',font:{size:8}}},
+    yaxis:{...BL.yaxis,range:[-42,58],title:{text:'dB',font:{size:8}}},
+    shapes:[
+      {type:'line',x0:0,x1:1,xref:'paper',y0:7.5, y1:7.5, line:{color:'#ff9800',width:1,dash:'dot'}},
+      {type:'line',x0:0,x1:1,xref:'paper',y0:11,  y1:11,  line:{color:'#39ff14',width:1,dash:'dot'}},
+      {type:'line',x0:0,x1:1,xref:'paper',y0:-36.7,y1:-36.7,line:{color:'#3a5080',width:1,dash:'dash'}},
+    ],
+    annotations:[
+      {x:1,xref:'paper',y:7.5, text:'捕获门限',showarrow:false,font:{size:7,color:'#ff9800'},xanchor:'right'},
+      {x:1,xref:'paper',y:11,  text:'跟踪门限',showarrow:false,font:{size:7,color:'#39ff14'},xanchor:'right'},
+    ],
+  },{displayModeBar:false,responsive:true});
+
+  Plotly.newPlot('chart-tput',[
+    {x:[],y:[],type:'scatter',mode:'lines',
+     line:{color:'#ffd700',width:1.5},
+     fill:'tozeroy',fillcolor:'rgba(255,215,0,0.055)',name:'吞吐量'},
+  ],{
+    ...BL,
+    title:{text:'链路吞吐量 (Mbps)',font:{size:10,color:'#6888b0',family:'Noto Sans SC'}},
+    xaxis:{...BL.xaxis,title:{text:'时间(s)',font:{size:8}}},
+    yaxis:{...BL.yaxis,range:[0,1100],title:{text:'Mbps',font:{size:8}}},
+  },{displayModeBar:false,responsive:true});
+}
+function pushChart(t,snr,tput){
+  snrHistory.push(snr);tputHistory.push(tput);timeHistory.push(t);
+  if(snrHistory.length>MAX_HIST){snrHistory.shift();tputHistory.shift();timeHistory.shift();}
+  Plotly.update('chart-snr', {x:[timeHistory],y:[snrHistory]}, {}, [0]);
+  Plotly.update('chart-tput',{x:[timeHistory],y:[tputHistory]},{}, [0]);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CLOCK
+// ═══════════════════════════════════════════════════════════════════
+function tickClock(){
+  const n=new Date(),p=v=>String(v).padStart(2,'0');
+  document.getElementById('clock').textContent=`${p(n.getUTCHours())}:${p(n.getUTCMinutes())}:${p(n.getUTCSeconds())} UTC`;
+}
+setInterval(tickClock,1000);tickClock();
+
+// ═══════════════════════════════════════════════════════════════════
+// MAIN LOOP
+// ═══════════════════════════════════════════════════════════════════
+function animate(ts){
+  requestAnimationFrame(animate);
+  const dt=lastTs===null?16:Math.min(ts-lastTs,100);
+  lastTs=ts;
+  const realDt=dt*simSpeed;
+  simTimeSec+=realDt/1000;
+
+  if(autoPlay){
+    phaseElapsed+=realDt;
+    const dur=PHASES[currentPhase].dur;
+
+    // Advance assisted scan (phase 2)
+    if(currentPhase===2&&!captureFoundAssisted){
+      const tickMs=300;
+      const prevTick=Math.floor((phaseElapsed-realDt)/tickMs);
+      const curTick =Math.floor(phaseElapsed/tickMs);
+      if(curTick>prevTick){
+        scanStepAssisted=Math.min(scanStepAssisted+1,captureStepAssisted);
+        if(scanStepAssisted>=captureStepAssisted){
+          captureFoundAssisted=true;
+          triggerCaptureFlash();
+        }
+      }
+    }
+
+    // Advance blind scan (phase 5) and deadlock scan (phase 7)
+    if(currentPhase===5||currentPhase===7){
+      const tickMs=currentPhase===7?150:95;
+      const prevTick=Math.floor((phaseElapsed-realDt)/tickMs);
+      const curTick =Math.floor(phaseElapsed/tickMs);
+      if(curTick>prevTick){
+        scanStep=Math.min(scanStep+1,N_FIBO-1);
+        if(!captureFound&&captureStep>0&&scanStep>=captureStep){
+          captureFound=true;
+          if(currentPhase===5) triggerCaptureFlash();
+        }
+      }
+    }
+
+    // Chart update
+    chartTick+=realDt;
+    if(chartTick>200){
+      chartTick=0;
+      const snr=simSNR(currentPhase,phaseElapsed,dur);
+      const tp =simTput(currentPhase,phaseElapsed,dur);
+      pushChart(Math.round(simTimeSec),snr,tp);
+      const sc=document.getElementById('mc-snr');
+      sc.className='metric-card'+(snr>11?' good':snr>0?' warn':'');
+      document.getElementById('mv-snr').innerHTML=snr.toFixed(1)+'<span class="metric-unit"> dB</span>';
+      const tc=document.getElementById('mc-tput');
+      tc.className='metric-card'+(tp>=900?' good':tp>50?' warn':'');
+      document.getElementById('mv-tput').innerHTML=Math.round(tp)+'<span class="metric-unit"> Mbps</span>';
+    }
+
+    document.getElementById('phase-progress').style.width=Math.min(100,phaseElapsed/dur*100)+'%';
+
+    if(phaseElapsed>=dur){
+      if(currentPhase<PHASES.length-1) setPhase(currentPhase+1);
+      else{simTimeSec=0;snrHistory=[];tputHistory=[];timeHistory=[];setPhase(0);initCharts();}
+    }
+  }
+
+  const orbT=simTimeSec*20;
+  update3D(orbT);
+
+  document.getElementById('sim-time-label').textContent='T+'+Math.round(simTimeSec)+'s';
+  renderer.render(scene,camera);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════════════════
+initThree();
+initCharts();
+setPhase(0);
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
